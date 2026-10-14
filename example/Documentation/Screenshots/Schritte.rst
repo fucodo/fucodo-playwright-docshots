@@ -52,9 +52,12 @@ Markieren
 ..  code-block:: gherkin
 
     Dann markiere den Button "Speichern"
-    Und markiere das Feld "Vorname" mit "1"
-    Und markiere das Feld "E-Mail" mit "2" und Hinweis "Pflichtfeld"
-    Und zeige mit einem Pfeil auf den Link "Hilfe"
+    Dann markiere das Feld "Vorname" mit "1"
+    Dann markiere das Feld "E-Mail" mit "2" und Hinweis "Pflichtfeld"
+    Dann markiere den Link "Hilfe" und dem Hinweis "Öffnet die Anleitung"
+    Dann zeige mit einem Pfeil auf den Button "Hilfe"
+    Dann zeige mit einem Pfeil auf das Feld "Suche" und mit "2"
+    Dann zeige mit einem Pfeil auf den Link "Hilfe" und mit "2" und dem Hinweis "Pflichtfeld"
     Und verdecke das Feld "E-Mail"
 
 Screenshot

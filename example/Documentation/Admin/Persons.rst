@@ -43,7 +43,7 @@ Personenliste
     @lang:de
     Angenommen ich bin angemeldet als "schooladmin"
     Wenn ich die Seite "/administration/persons" öffne
-    Dann zeige mit einem Pfeil auf den Button "Neue Person"
+    Dann zeige mit einem Pfeil auf den Button "Neue Person" und mit "1" und dem Hinweis "Neue Person anlegen"
     Und verdecke die Spalte "E-Mail"
     Und erstelle einen Screenshot
 

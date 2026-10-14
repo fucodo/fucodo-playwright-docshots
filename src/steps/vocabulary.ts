@@ -32,8 +32,11 @@ const LETTERS = 'A-Za-zÄÖÜäöüß';
 const ART = '(?:(?:den|die|das|dem|der|einen|eine|ein|the|a|an) )?';
 const T = `${ART}(?<kind>[${LETTERS}]+) "(?<name>[^"]*)"`;
 const Q = (name: string) => `"(?<${name}>[^"]*)"`;
-const LABEL_NOTE_DE = `(?: mit ${Q('label')})?(?: und (?:dem )?Hinweis ${Q('note')})?`;
-const LABEL_NOTE_EN = `(?: with (?:label )?${Q('label')})?(?: and (?:a )?note ${Q('note')})?`;
+// One shared suffix for every marking step (markiere / zeige mit einem Pfeil / …):
+//   … mit "1"   … und mit "1"   … und Hinweis "x"   … und dem Hinweis "x"   … mit dem Hinweis "x"
+// Number and note are optional and can be combined: … und mit "2" und dem Hinweis "Pflichtfeld"
+const LABEL_NOTE_DE = `(?: (?:und )?mit (?:der Nummer )?${Q('label')})?(?: (?:und|mit) (?:dem )?Hinweis ${Q('note')})?`;
+const LABEL_NOTE_EN = `(?: (?:and )?with (?:label |number )?${Q('label')})?(?: (?:and|with) (?:a |the )?note ${Q('note')})?`;
 const re = (...parts: string[]) => new RegExp(`^${parts.join('')}$`);
 
 const target = (ctx: VocabContext, a: VocabArgs) => ctx.target(a.kind!, a.name!);
@@ -202,8 +205,17 @@ export const VOCABULARY: VocabEntry[] = [
       en: [re('(?:I )?highlight ', T, LABEL_NOTE_EN), re('(?:I )?outline ', T, LABEL_NOTE_EN)],
     },
     examples: {
-      de: ['Dann markiere den Button "Speichern"', 'Und markiere das Feld "Vorname" mit "1"', 'Und markiere das Feld "E-Mail" mit "2" und Hinweis "Pflichtfeld"'],
-      en: ['Then highlight the button "Save" with "1"', 'And highlight the field "Email" with "2" and note "Required"'],
+      de: [
+        'Dann markiere den Button "Speichern"',
+        'Dann markiere das Feld "Vorname" mit "1"',
+        'Dann markiere das Feld "E-Mail" mit "2" und Hinweis "Pflichtfeld"',
+        'Dann markiere den Link "Hilfe" und dem Hinweis "Öffnet die Anleitung"',
+      ],
+      en: [
+        'Then highlight the button "Save"',
+        'Then highlight the field "First name" with "1"',
+        'Then highlight the field "Email" with "2" and note "Required"',
+      ],
     },
     run: async (ctx, a) => {
       ctx.docshot.highlight(target(ctx, a), { label: opt(a.label), note: opt(a.note), description: `${a.kind} "${a.name}"` });
@@ -215,7 +227,17 @@ export const VOCABULARY: VocabEntry[] = [
       de: [re('(?:ich )?zeige (?:mit einem Pfeil )?auf ', T, LABEL_NOTE_DE)],
       en: [re('(?:I )?point (?:with an arrow )?(?:at|to) ', T, LABEL_NOTE_EN)],
     },
-    examples: { de: ['Und zeige mit einem Pfeil auf den Link "Hilfe"'], en: ['And point at the link "Help"'] },
+    examples: {
+      de: [
+        'Dann zeige mit einem Pfeil auf den Button "Hilfe"',
+        'Dann zeige mit einem Pfeil auf das Feld "Suche" und mit "2"',
+        'Dann zeige mit einem Pfeil auf den Link "Hilfe" und mit "2" und dem Hinweis "Pflichtfeld"',
+      ],
+      en: [
+        'Then point at the button "Help"',
+        'Then point at the link "Help" and with "2" and the note "Required"',
+      ],
+    },
     run: async (ctx, a) => {
       ctx.docshot.pointAt(target(ctx, a), { label: opt(a.label), note: opt(a.note), description: `${a.kind} "${a.name}"` });
     },

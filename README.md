@@ -232,6 +232,27 @@ DOCSHOTS_AI_TIMEOUT_MS=180000
 Images and the page's ARIA snapshot are sent to the configured API, so use a self-hosted
 model when screenshots may contain personal data.
 
+## Marking steps
+
+Every marking step takes the same optional suffixes, in this order: a number, then a note.
+
+```gherkin
+Dann markiere den Button "Speichern"
+Dann markiere das Feld "Vorname" mit "1"
+Dann markiere das Feld "E-Mail" mit "2" und Hinweis "Pflichtfeld"
+Dann zeige mit einem Pfeil auf den Link "Hilfe"
+Dann zeige mit einem Pfeil auf den Link "Hilfe" und mit "2" und dem Hinweis "Pflichtfeld"
+Und verdecke das Feld "E-Mail"
+```
+
+- The number can be written `mit "1"` or `und mit "1"`.
+- The note can be written `und Hinweis "…"`, `und dem Hinweis "…"` or `mit dem Hinweis "…"`.
+- English: `with "1"`, `and note "…"`, `and with "2" and the note "…"`.
+
+Notes are measured in the page. They are placed beside the arrow tail or next to the
+element, wherever they cover the least text, controls and other marks. For element
+screenshots they stay inside the crop if possible; otherwise the crop grows to include them.
+
 ## CLI
 
 ```bash

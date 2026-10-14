@@ -8,7 +8,7 @@ import { peer } from './peer';
 const { test: base } = peer<typeof PlaywrightBdd>('playwright-bdd');
 import {
   decoratedRect, documentSizeInPage, drawOverlaysInPage, measureInPage, OVERLAY_ATTR,
-  removeOverlaysInPage, union, type MarkStyle, type MeasuredMark, type OverlayTheme, type Rect,
+  removeOverlaysInPage, setOverlayVisibleInPage, union, type MarkStyle, type MeasuredMark, type OverlayTheme, type Rect,
 } from './overlay';
 
 export interface DocshotVariant {
@@ -155,13 +155,25 @@ export class Docshot {
       measured.push({ rect, style: mark.style, label: mark.label, note: mark.note });
     }
 
-    let clip: Rect | undefined;
+    // draw first: notes find their place in the page, the crop then follows the real positions
+    let targetBounds: Rect | undefined;
+    let targetRect: Rect | undefined;
     if (options.target) {
-      const targetRect = await options.target.evaluate(measureInPage);
+      targetRect = await options.target.evaluate(measureInPage);
       const pad = opts.docshotPadding;
+      targetBounds = { x: targetRect.x - pad, y: targetRect.y - pad, width: targetRect.width + pad * 2, height: targetRect.height + pad * 2 };
+    }
+    const noteBoxes = measured.length
+      ? await page.evaluate(drawOverlaysInPage, { marks: measured, theme: opts.docshotTheme, attr: OVERLAY_ATTR, bounds: targetBounds })
+      : [];
+
+    let clip: Rect | undefined;
+    if (targetRect && targetBounds) {
+      const near = (r: Rect) => intersects(r, targetBounds!);
       const covered = union([
-        { x: targetRect.x - pad, y: targetRect.y - pad, width: targetRect.width + pad * 2, height: targetRect.height + pad * 2 },
-        ...measured.filter((m) => intersects(m.rect, targetRect)).map(decoratedRect),
+        targetBounds,
+        ...measured.filter((m) => intersects(m.rect, targetRect!)).map((m) => decoratedRect({ ...m, note: undefined })),
+        ...noteBoxes.filter(near),
       ]);
       const doc = await page.evaluate(documentSizeInPage);
       clip = clampRect(covered, doc);
@@ -183,11 +195,12 @@ export class Docshot {
         maskColor: opts.docshotMaskColor,
       });
 
-    if (cleanFile) await shot(cleanFile);
-    if (measured.length) {
-      await page.evaluate(drawOverlaysInPage, { marks: measured, theme: opts.docshotTheme, attr: OVERLAY_ATTR });
-    }
     try {
+      if (cleanFile) {
+        if (measured.length) await page.evaluate(setOverlayVisibleInPage, { attr: OVERLAY_ATTR, visible: false });
+        await shot(cleanFile);
+        if (measured.length) await page.evaluate(setOverlayVisibleInPage, { attr: OVERLAY_ATTR, visible: true });
+      }
       await shot(file);
     } finally {
       if (measured.length) await page.evaluate(removeOverlaysInPage, OVERLAY_ATTR);

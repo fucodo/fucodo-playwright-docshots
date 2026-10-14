@@ -41,8 +41,8 @@ export function documentSizeInPage(): { width: number; height: number } {
  * Runs in the browser (must be self-contained – it is serialized by Playwright).
  * Draws all marks into one absolutely positioned layer in document coordinates.
  */
-export function drawOverlaysInPage(args: { marks: MeasuredMark[]; theme: OverlayTheme; attr: string }): void {
-  const { marks, theme, attr } = args;
+export function drawOverlaysInPage(args: { marks: MeasuredMark[]; theme: OverlayTheme; attr: string; bounds?: Rect }): Rect[] {
+  const { marks, theme, attr, bounds } = args;
   const NS = 'http://www.w3.org/2000/svg';
   const d = document.documentElement;
   const width = Math.max(d.scrollWidth, document.body ? document.body.scrollWidth : 0);
@@ -116,17 +116,38 @@ export function drawOverlaysInPage(args: { marks: MeasuredMark[]; theme: Overlay
     }
   }
   layer.appendChild(svg);
+  document.documentElement.appendChild(layer);
+
+  // ── notes: measured, then placed where they cover the least ───────────────
+  type Box = { x: number; y: number; w: number; h: number };
+  const area = (a: Box, b: Box) =>
+    Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)) * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+
+  // things a note should not cover: visible text and controls (no big containers), plus all marks
+  const viewportArea = window.innerWidth * window.innerHeight;
+  const obstacles: Box[] = [];
+  document.querySelectorAll('h1,h2,h3,h4,h5,h6,label,button,a,input,select,textarea,th,td,p,li,img,svg,[role="button"],[role="link"],[role="tab"]').forEach((node) => {
+    const r = (node as Element).getBoundingClientRect();
+    if (r.width < 2 || r.height < 2 || r.width * r.height > viewportArea * 0.25) return;
+    const cs = getComputedStyle(node as Element);
+    if (cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0) return;
+    obstacles.push({ x: r.left + window.scrollX, y: r.top + window.scrollY, w: r.width, h: r.height });
+  });
+  // marked elements and their outlines (badges sit 16px outside) – the note's own element only exactly
+  const markBox = (m: MeasuredMark, extra: number): Box => ({ x: m.rect.x - PAD - extra, y: m.rect.y - PAD - extra, w: m.rect.width + (PAD + extra) * 2, h: m.rect.height + (PAD + extra) * 2 });
+  const placedNotes: Box[] = [];
 
   for (const mark of marks) {
     if (!mark.note) continue;
     const note = document.createElement('div');
     note.textContent = mark.note;
     Object.assign(note.style, {
-      // right-aligned below the element: the left side usually holds the next label
       position: 'absolute',
-      right: Math.max(4, width - (mark.rect.x + mark.rect.width + PAD)) + 'px',
-      top: mark.rect.y + mark.rect.height + PAD + 8 + 'px',
+      left: '0px',
+      top: '0px',
+      visibility: 'hidden',
       maxWidth: '280px',
+      width: 'max-content',
       background: theme.color,
       color: theme.textColor,
       font: `600 13px/1.35 ${theme.fontFamily}`,
@@ -136,13 +157,59 @@ export function drawOverlaysInPage(args: { marks: MeasuredMark[]; theme: Overlay
       whiteSpace: 'normal',
     });
     layer.appendChild(note);
+    const nw = note.offsetWidth;
+    const nh = note.offsetHeight;
+
+    const r = mark.rect;
+    const ex = r.x - PAD, ey = r.y - PAD, ew = r.width + PAD * 2, eh = r.height + PAD * 2;
+    const G = 10;
+    const candidates: Box[] = [];
+    if (mark.style === 'arrow') {
+      const fromLeft = r.x > 110;
+      const tailX = fromLeft ? ex - 84 : ex + ew + 84;
+      const tailY = r.y + r.height / 2 - 48;
+      const gap = mark.label ? 24 : G;
+      candidates.push(
+        fromLeft ? { x: tailX - gap - nw, y: tailY - nh / 2, w: nw, h: nh } : { x: tailX + gap, y: tailY - nh / 2, w: nw, h: nh }, // beside the tail
+        { x: tailX - nw / 2, y: tailY - gap - nh, w: nw, h: nh },                 // above the tail
+        { x: ex + ew - nw, y: ey + eh + G, w: nw, h: nh },                        // below the element, right-aligned
+        { x: ex, y: ey + eh + G, w: nw, h: nh },                                  // below the element, left-aligned
+        { x: ex + ew - nw, y: ey - G - nh, w: nw, h: nh },                        // above the element
+      );
+    } else {
+      candidates.push(
+        { x: ex + ew - nw, y: ey + eh + G, w: nw, h: nh },                        // below, right-aligned
+        { x: ex + ew + G, y: ey + eh / 2 - nh / 2, w: nw, h: nh },               // right
+        { x: ex + ew - nw, y: ey - G - nh, w: nw, h: nh },                        // above, right-aligned
+        { x: ex, y: ey + eh + G, w: nw, h: nh },                                  // below, left-aligned
+        { x: ex - G - nw, y: ey + eh / 2 - nh / 2, w: nw, h: nh },               // left
+      );
+    }
+
+    let best = candidates[0];
+    let bestScore = Infinity;
+    candidates.forEach((c, i) => {
+      let score = i * 50; // keep the natural order when everything is free
+      if (c.x < 4 || c.y < 4 || c.x + c.w > width - 4 || c.y + c.h > height - 4) score += 1e9; // outside the page
+      // stay inside the crop of an element screenshot if at all possible
+      if (bounds && (c.x < bounds.x || c.y < bounds.y || c.x + c.w > bounds.x + bounds.width || c.y + c.h > bounds.y + bounds.height)) score += 1e6;
+      for (const o of obstacles) score += area(c, o);
+      for (const m of marks) score += area(c, markBox(m, m === mark ? 0 : 16)) * 2;
+      for (const p of placedNotes) score += area(c, p) * 10;
+      if (score < bestScore) { bestScore = score; best = c; }
+    });
+    // nothing fits inside the page → clamp the natural position
+    const x = Math.min(Math.max(4, best.x), width - nw - 4);
+    const y = Math.min(Math.max(4, best.y), height - nh - 4);
+    Object.assign(note.style, { left: x + 'px', top: y + 'px', visibility: '' }); // inherit from the layer
+    placedNotes.push({ x, y, w: nw, h: nh });
   }
 
-  document.documentElement.appendChild(layer);
 
   // Modal <dialog>s and popovers live in the browser's top layer, above any z-index.
   // Promoting the overlay to a popover puts it into the top layer as well – shown last, so on top.
   // position:absolute in the top layer is relative to the initial containing block = document coords.
+  // (inline on purpose: page.evaluate only serializes this one function)
   const promotable = layer as HTMLElement & { showPopover?: () => void };
   if (typeof promotable.showPopover === 'function') {
     layer.setAttribute('popover', 'manual');
@@ -153,6 +220,12 @@ export function drawOverlaysInPage(args: { marks: MeasuredMark[]; theme: Overlay
       /* not supported – keep the normal layer */
     }
   }
+  return placedNotes.map((b) => ({ x: b.x - 4, y: b.y - 4, width: b.w + 8, height: b.h + 8 }));
+}
+
+/** Runs in the browser: hide/show the overlay layer (for the clean shot with the same crop). */
+export function setOverlayVisibleInPage(args: { attr: string; visible: boolean }): void {
+  document.querySelectorAll(`[${args.attr}]`).forEach((n) => ((n as HTMLElement).style.visibility = args.visible ? 'visible' : 'hidden'));
 }
 
 /** Runs in the browser. */
@@ -172,7 +245,10 @@ export function decoratedRect(mark: MeasuredMark): Rect {
     else right = x + width + 110;
     top = Math.min(top, y + height / 2 - 66);
   }
-  if (mark.note) bottom = Math.max(bottom, y + height + 70);
+  if (mark.note && mark.style === 'arrow') {
+    if (x > 110) left = Math.min(left, x - 110 - 300);
+    else right = Math.max(right, x + width + 110 + 300);
+  } else if (mark.note) bottom = Math.max(bottom, y + height + 70);
   return { x: left, y: top, width: right - left, height: bottom - top };
 }
 
