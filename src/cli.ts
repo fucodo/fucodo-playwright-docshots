@@ -5,6 +5,7 @@ import path from 'node:path';
 import { rewriteLocations } from './sources/extract';
 import { VOCABULARY } from './steps/vocabulary';
 import { fromImage } from './ai/command';
+import { peerLocations } from './peer';
 import type { DocshotLanguage } from './sources/rst';
 
 const HELP = `docshots – Doku-Screenshots aus Gherkin-Schritten
@@ -72,8 +73,27 @@ Prüfen Sie die Schreibweise – alle verfügbaren Schritte stehen in der Schrit
 ──────────────────────────────────────────────────────────────────────
 `;
 
-function hintIfMissingSteps(output: string) {
-  if (/Missing step definitions/i.test(output)) process.stderr.write(STAFF_HINT);
+async function hintIfMissingSteps(output: string, config: string) {
+  if (!/Missing step definitions/i.test(output)) return;
+  const registered = await exportProjectSteps(config, true);
+  if (registered.length > 0) {
+    process.stderr.write(STAFF_HINT);
+    return;
+  }
+  // Not a typo: no step is registered at all → setup problem, explain it for devs.
+  const problems: string[] = [];
+  for (const pkg of ['playwright-bdd', '@playwright/test']) {
+    const { project, own } = peerLocations(pkg);
+    if (project && own && project !== own) {
+      problems.push(`  • ${pkg} ist doppelt installiert:\n      Projekt: ${project}\n      Paket:   ${own}\n    → Paket als Tarball installieren (npm pack), nicht per Symlink; dann "npm ls ${pkg}" sollte nur eine Version zeigen.`);
+    }
+  }
+  problems.push(
+    `  • Der "steps"-Glob in ${config} passt auf keine Datei, oder die Datei mit registerDocshotSteps() ist nicht dabei.`,
+    '    Pfade sind relativ zum Ordner, in dem der Befehl läuft (' + process.cwd() + ').',
+    `    Prüfen: npx bddgen export -c ${config}   → sollte rund 60 Schritte auflisten.`,
+  );
+  process.stderr.write(`\n✘ Es sind überhaupt keine Schritt-Definitionen registriert. Mögliche Ursachen:\n${problems.join('\n')}\n\n`);
 }
 
 function mergeManifest(workDir: string): string | undefined {
@@ -121,7 +141,7 @@ function cheatSheet(lang: DocshotLanguage, projectSteps: string[]): string {
 }
 
 /** Project steps (cucumber expressions) via `bddgen export`, without built-in and internal steps. */
-async function exportProjectSteps(config: string): Promise<string[]> {
+async function exportProjectSteps(config: string, includeBuiltins = false): Promise<string[]> {
   const exported = await new Promise<string>((resolve) => {
     const child = spawn(process.execPath, [binOf('playwright-bdd', 'bddgen'), 'export', '-c', config], { stdio: ['inherit', 'pipe', 'inherit'] });
     let buf = '';
@@ -135,7 +155,7 @@ async function exportProjectSteps(config: string): Promise<string[]> {
     .filter((l) => /^\*\s/.test(l) || /^(Given|When|Then|Step)\b/.test(l))
     .map((l) => l.replace(/^\*\s*/, ''))
     .filter((l) => !l.includes('docshots-analyze'))
-    .filter((l) => !builtinSources.some((src) => l.includes(src)));
+    .filter((l) => includeBuiltins || !builtinSources.some((src) => l.includes(src)));
 }
 
 async function main() {
@@ -146,14 +166,14 @@ async function main() {
     case 'lint': {
       const r = await run(binOf('playwright-bdd', 'bddgen'), ['-c', config], workDir);
       if (r.code === 0) console.log('✔ Alle Screenshot-Schritte sind gültig.');
-      else hintIfMissingSteps(r.output);
+      else await hintIfMissingSteps(r.output, config);
       process.exit(r.code);
     }
     // falls through
     case 'test': {
       const gen = await run(binOf('playwright-bdd', 'bddgen'), ['-c', config], workDir);
       if (gen.code !== 0) {
-        hintIfMissingSteps(gen.output);
+        await hintIfMissingSteps(gen.output, config);
         process.exit(gen.code);
       }
       const pw = await run(binOf('@playwright/test', 'playwright'), ['test', '-c', config, ...rest], workDir);

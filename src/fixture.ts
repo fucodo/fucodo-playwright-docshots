@@ -3,7 +3,9 @@ import path from 'node:path';
 import type { Locator, Page, TestInfo } from '@playwright/test';
 // Extending playwright-bdd's test (not @playwright/test) makes mergeTests(appTest, docshotTest)
 // a valid base for createBdd().
-import { test as base } from 'playwright-bdd';
+import type * as PlaywrightBdd from 'playwright-bdd';
+import { peer } from './peer';
+const { test: base } = peer<typeof PlaywrightBdd>('playwright-bdd');
 import {
   decoratedRect, documentSizeInPage, drawOverlaysInPage, measureInPage, OVERLAY_ATTR,
   removeOverlaysInPage, union, type MarkStyle, type MeasuredMark, type OverlayTheme, type Rect,

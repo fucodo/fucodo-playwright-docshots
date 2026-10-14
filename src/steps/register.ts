@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import type { Page, TestInfo, TestType } from '@playwright/test';
-import { createBdd } from 'playwright-bdd';
+import type * as PlaywrightBdd from 'playwright-bdd';
+import { peer } from '../peer';
 import type { Docshot } from '../fixture';
 import { createCredentialsResolver, type Credentials, type CredentialsResolver, type PersonaRegistry } from '../credentials';
 import type { DocshotLanguage } from '../sources/rst';
@@ -38,6 +39,7 @@ type FixturesWithDocshot = { page: Page; docshot: Docshot };
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function registerDocshotSteps<T extends TestType<any, any>>(test: T, adapters: DocshotAdapters = {}) {
+  const { createBdd } = peer<typeof PlaywrightBdd>('playwright-bdd');
   const bdd = createBdd(test);
   const resolveCredentials = adapters.credentials ?? createCredentialsResolver(adapters.personas);
   const languages = adapters.languages ?? ['de', 'en'];

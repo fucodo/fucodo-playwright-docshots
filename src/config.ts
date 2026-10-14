@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { devices, type PlaywrightTestConfig, type Project } from '@playwright/test';
-import { defineBddConfig } from 'playwright-bdd';
+import type { PlaywrightTestConfig, Project } from '@playwright/test';
+import type * as PlaywrightTest from '@playwright/test';
+import type * as PlaywrightBdd from 'playwright-bdd';
+import { peer } from './peer';
 import type { DocshotOptions, DocshotVariant } from './fixture';
 import type { OverlayTheme } from './overlay';
 import { extractAll } from './sources/extract';
@@ -66,6 +68,7 @@ export const DEFAULT_OUTPUT = 'Documentation/Images/Screenshots/{id}/{viewport}-
 const EXTRACTED_ENV = 'DOCSHOTS_EXTRACTED';
 
 function viewportUse(spec: ViewportSpec, browserName: DocshotConfig['browserName']) {
+  const { devices } = peer<typeof PlaywrightTest>('@playwright/test');
   if (typeof spec === 'string') {
     const device = devices[spec];
     if (!device) throw new Error(`Unbekanntes Playwright-Gerät "${spec}"`);
@@ -117,6 +120,7 @@ export function defineDocshotConfig(cfg: DocshotConfig): PlaywrightTestConfig {
     ...(process.env.DOCSHOTS_ANALYZE === '1' ? [path.join(workDir, 'analyze', '**/*.feature')] : []),
   ].map((p) => p.split(path.sep).join('/'));
 
+  const { defineBddConfig } = peer<typeof PlaywrightBdd>('playwright-bdd');
   const testDir = defineBddConfig({
     features,
     steps: cfg.steps.map((p) => path.resolve(rootDir, p).split(path.sep).join('/')),
