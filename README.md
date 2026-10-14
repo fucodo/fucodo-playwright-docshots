@@ -249,9 +249,20 @@ Und verdecke das Feld "E-Mail"
 - The note can be written `und Hinweis "…"`, `und dem Hinweis "…"` or `mit dem Hinweis "…"`.
 - English: `with "1"`, `and note "…"`, `and with "2" and the note "…"`.
 
-Notes are measured in the page. They are placed beside the arrow tail or next to the
-element, wherever they cover the least text, controls and other marks. For element
-screenshots they stay inside the crop if possible; otherwise the crop grows to include them.
+Annotations are laid out together in the page, right before the capture:
+
+1. Outlines and their badges are fixed by the marked elements.
+2. Each arrow tries 8 directions × 4 lengths, with its note beyond or beside the badge.
+3. Every candidate is scored. Leaving the screenshot area (viewport, full page, or the crop of an element shot) costs the most. Next come crossing another arrow, another marked element, a badge or a note, and getting closer than 10 px to another badge or note. Covering page text costs least.
+4. Arrows are placed one after another, then each one is placed again with all others in place (two refinement passes).
+5. Notes of outlines are placed last, avoiding everything above.
+
+For element shots the crop grows to include whatever was drawn for the marks inside it.
+If a layout still has problems because there was no free space, the test gets a
+`docshot-layout` annotation (visible in the HTML report) and a console warning, for example
+`⚠ person-create [mobile-light-de]: Pfeile von Markierung 1 und Markierung 2 kreuzen sich`.
+The final geometry is stored per image in `.docshots/manifest.json` (`layout`), and
+`layoutProblems()` is exported for your own checks.
 
 ## CLI
 

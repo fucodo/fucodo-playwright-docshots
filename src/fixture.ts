@@ -7,8 +7,8 @@ import type * as PlaywrightBdd from 'playwright-bdd';
 import { peer } from './peer';
 const { test: base } = peer<typeof PlaywrightBdd>('playwright-bdd');
 import {
-  decoratedRect, documentSizeInPage, drawOverlaysInPage, measureInPage, OVERLAY_ATTR,
-  removeOverlaysInPage, setOverlayVisibleInPage, union, type MarkStyle, type MeasuredMark, type OverlayTheme, type Rect,
+  documentSizeInPage, drawOverlaysInPage, measureInPage, OVERLAY_ATTR,
+  layoutProblems, removeOverlaysInPage, setOverlayVisibleInPage, union, type CaptureMode, type OverlayLayout, type MarkStyle, type MeasuredMark, type OverlayTheme, type Rect,
 } from './overlay';
 
 export interface DocshotVariant {
@@ -50,6 +50,8 @@ export interface ManifestEntry {
   file: string;
   cleanFile?: string;
   marks: { label?: string; note?: string; style: MarkStyle; rect: Rect }[];
+  /** where arrows, badges and notes ended up (document coordinates) */
+  layout?: OverlayLayout;
   source?: string;
   test: string;
 }
@@ -93,6 +95,8 @@ export function readDocshotTags(tags: string[]) {
 export class Docshot {
   private marks: PendingMark[] = [];
   private masks: Locator[] = [];
+  /** Layout of the annotations of the last capture (for tests and debugging). */
+  lastLayout: OverlayLayout | undefined;
 
   constructor(
     private readonly page: Page,
@@ -163,20 +167,29 @@ export class Docshot {
       const pad = opts.docshotPadding;
       targetBounds = { x: targetRect.x - pad, y: targetRect.y - pad, width: targetRect.width + pad * 2, height: targetRect.height + pad * 2 };
     }
-    const noteBoxes = measured.length
-      ? await page.evaluate(drawOverlaysInPage, { marks: measured, theme: opts.docshotTheme, attr: OVERLAY_ATTR, bounds: targetBounds })
-      : [];
+    const mode: CaptureMode = targetBounds ? 'crop' : options.fullPage ? 'page' : 'viewport';
+    const layout: OverlayLayout | undefined = measured.length
+      ? await page.evaluate(drawOverlaysInPage, { marks: measured, theme: opts.docshotTheme, attr: OVERLAY_ATTR, mode, bounds: targetBounds })
+      : undefined;
+    this.lastLayout = layout;
 
     let clip: Rect | undefined;
     if (targetRect && targetBounds) {
-      const near = (r: Rect) => intersects(r, targetBounds!);
-      const covered = union([
-        targetBounds,
-        ...measured.filter((m) => intersects(m.rect, targetRect!)).map((m) => decoratedRect({ ...m, note: undefined })),
-        ...noteBoxes.filter(near),
-      ]);
+      // grow the crop by everything drawn for marks inside the target (arrows, badges, notes)
+      const inTarget = new Set(measured.map((m, i) => (intersects(m.rect, targetRect!) ? i : -1)).filter((i) => i >= 0));
+      const covered = union([targetBounds, ...(layout?.decorations ?? []).filter((d) => inTarget.has(d.mark)).map((d) => d.box)]);
       const doc = await page.evaluate(documentSizeInPage);
       clip = clampRect(covered, doc);
+    }
+
+    if (layout) {
+      // element shots: the crop grew around the annotations – check against what is really shown
+      if (clip) layout.view = clip;
+      // unavoidable collisions (no free space left) are reported instead of silently drawn
+      for (const problem of layoutProblems(layout, measured)) {
+        testInfo.annotations.push({ type: 'docshot-layout', description: `${id}: ${problem}` });
+        console.warn(`⚠ ${id} [${testInfo.project.name}]: ${problem}`);
+      }
     }
 
     const variant = opts.docshotVariant;
@@ -213,6 +226,7 @@ export class Docshot {
       file,
       cleanFile,
       marks: measured.map((m) => ({ label: m.label, note: m.note, style: m.style, rect: m.rect })),
+      layout,
       source: readDocshotTags(testInfo.tags).source,
       test: testInfo.titlePath.join(' › '),
     };

@@ -81,5 +81,22 @@ http.createServer((req, res) => {
       <label class="check"><input type="checkbox" checked> ${t.active}</label>
       <div class="actions"><button class="ghost" value="cancel">${t.cancel}</button><button class="primary" value="save">${t.save}</button></div></form></dialog>`));
   }
+  if (req.url === '/stress') {
+    // deliberately hard layout for the annotation solver: corners, a tight cluster, fields close by
+    const btn = (label, style) => `<button class="primary" style="position:absolute;${style}">${label}</button>`;
+    return send(page(l, 'Stress', `
+      <div style="position:relative;height:calc(100vh - 110px);min-height:520px">
+        ${btn('Ecke links', 'left:0;top:0')}
+        ${btn('Ecke rechts', 'right:0;top:0')}
+        ${btn('Unten links', 'left:0;bottom:0')}
+        ${btn('Unten rechts', 'right:0;bottom:0')}
+        <div style="position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);display:flex;gap:8px">
+          <button class="primary">Eins</button><button class="primary">Zwei</button><button class="primary">Drei</button>
+        </div>
+        <div class="card" style="position:absolute;left:50%;top:62%;transform:translateX(-50%);width:min(420px,90%)">
+          <label for="s1">Suchbegriff</label><input id="s1"><label for="s2">Kategorie</label><input id="s2">
+        </div>
+      </div>`));
+  }
   send('Not found', 404);
 }).listen(Number(process.env.PORT || 4317), () => console.log('mock app on', process.env.PORT || 4317));

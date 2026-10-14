@@ -9,5 +9,6 @@ export { VOCABULARY, type VocabEntry } from './steps/vocabulary';
 export { createCredentialsResolver, envName, type Persona, type PersonaRegistry, type Credentials, type CredentialsResolver } from './credentials';
 export { extractAll, rewriteLocations } from './sources/extract';
 export { parseRst, toFeature, DocshotSourceError, type DocshotLanguage } from './sources/rst';
-export type { OverlayTheme, MarkStyle } from './overlay';
+export { layoutProblems } from './overlay';
+export type { OverlayTheme, MarkStyle, OverlayLayout, CaptureMode } from './overlay';
 export { checkSetup, initProject, formatWarnings, type SetupWarning, type InitOptions, type InitResult } from './setup';
