@@ -1,0 +1,14 @@
+{
+  "name": "docshots-example",
+  "private": true,
+  "scripts": {
+    "docshots": "docshots test",
+    "docshots:lint": "docshots lint",
+    "docshots:steps": "docshots steps --out Documentation/Screenshots/Schritte.rst"
+  },
+  "devDependencies": {
+    "@fucodo/playwright-docshots": "file:../fucodo-playwright-docshots-0.1.0.tgz",
+    "@playwright/test": "^1.64.1",
+    "playwright-bdd": "^9.2.1"
+  }
+}

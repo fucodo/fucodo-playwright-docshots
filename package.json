@@ -1,0 +1,46 @@
+{
+  "name": "@fucodo/playwright-docshots",
+  "version": "0.1.0",
+  "description": "Documentation screenshots from Gherkin steps (embedded in RST or in .feature files) with Playwright – highlights, callouts, viewport/theme/language variants.",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "docshots": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:unit": "node --test test/*.test.cjs",
+    "prepare": "npm run build"
+  },
+  "keywords": [
+    "playwright",
+    "screenshots",
+    "documentation",
+    "gherkin",
+    "bdd",
+    "rst",
+    "typo3"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "fast-glob": "^3.3.3"
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.49",
+    "playwright-bdd": ">=8"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^22.0.0",
+    "playwright-bdd": "^9.2.1",
+    "typescript": "^5.6.0"
+  }
+}

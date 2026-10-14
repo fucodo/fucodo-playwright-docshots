@@ -1,0 +1,3 @@
+.docshots/
+node_modules/
+.env
