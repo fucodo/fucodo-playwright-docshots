@@ -6,6 +6,7 @@ import { rewriteLocations } from './sources/extract';
 import { VOCABULARY } from './steps/vocabulary';
 import { fromImage } from './ai/command';
 import { peerLocations } from './peer';
+import { initProject } from './setup';
 import type { DocshotLanguage } from './sources/rst';
 
 const HELP = `docshots – Doku-Screenshots aus Gherkin-Schritten
@@ -14,6 +15,7 @@ const HELP = `docshots – Doku-Screenshots aus Gherkin-Schritten
   docshots lint     [-c docshots.config.ts]                       nur prüfen: Syntax, IDs, unbekannte Schritte (kein Browser)
   docshots steps    [-c docshots.config.ts] [--out Datei.rst] [--lang de|en]   Schritt-Übersicht als RST schreiben
   docshots manifest [--work-dir .docshots]                        manifest.json aus dem letzten Lauf zusammenführen
+  docshots init     [--dir Tests/Playwright] [--lang de|en] [--force]   Konfiguration, Schritt-Datei und Personas anlegen
   docshots from-image [Bild] [--url /pfad] [--persona name] [--insert]   Schritte aus einem alten Bild per KI erzeugen
 
 Beispiele:
@@ -205,6 +207,31 @@ async function main() {
       process.exit(await fromImage(own, config, workDir, { binOf, run, projectSteps: exportProjectSteps }));
     }
     // falls through
+    case 'init': {
+      const raw = process.argv.slice(3);
+      const opt = (name: string) => { const i = raw.indexOf(name); return i >= 0 ? raw[i + 1] : undefined; };
+      const res = initProject({
+        rootDir: process.cwd(),
+        dir: opt('--dir'),
+        force: raw.includes('--force'),
+        language: (opt('--lang') as 'de' | 'en' | undefined) ?? 'de',
+      });
+      const d = res.detected;
+      console.log('Erkannt:');
+      console.log(`  Playwright-Konfiguration: ${d.baseConfig ?? '– (keine gefunden, baseURL in docshots.config.ts setzen)'}`);
+      console.log(`  App-Fixtures (test):      ${d.appTest ?? '– (keine index.ts mit export test gefunden)'}`);
+      console.log(`  LoginPage:                ${d.loginPage ?? '– (Login-Adapter mit TODO angelegt)'}`);
+      console.log('');
+      for (const f of res.created) console.log(`  + ${f}`);
+      for (const f of res.skipped) console.log(`  = ${f} (existiert, nicht überschrieben – --force zum Ersetzen)`);
+      if (res.gitignoreUpdated) console.log('  + .docshots/ in .gitignore');
+      console.log(`
+Nächste Schritte:
+  1. Personas in der personas.ts anpassen und Passwörter als DOCSHOT_PW_<PERSONA> setzen (CI-Variable oder .env)
+  2. npx docshots lint
+  3. Einen ersten Block in eine RST-Datei schreiben (..  docshot: mein-erster-screenshot) und npx docshots test`);
+      return;
+    }
     case 'manifest': {
       const m = mergeManifest(workDir);
       console.log(m ? `Manifest: ${m}` : 'Kein Manifest gefunden – zuerst "docshots test" ausführen.');

@@ -28,6 +28,23 @@ decides their versions and only one Playwright copy is loaded.
 
 ## Setup (4 files)
 
+The quick way: `npx docshots init` creates the first three files below. It detects your
+`playwright.config.ts`, an `index.ts` exporting `test`, and a `LoginPage` with
+`completeLogin()`, and uses them in the generated code. Existing files are not
+overwritten (`--force` replaces them), and `.docshots/` is added to `.gitignore`.
+
+```bash
+npx docshots init                         # default folder: Tests/Playwright (or what exists)
+npx docshots init --dir e2e --lang en
+```
+
+Every `lint` and `test` checks this setup and warns before anything else goes wrong:
+- no step files match `steps`,
+- no file calls `registerDocshotSteps()`,
+- a relative import such as `../personas` points to a missing file,
+- `docshotTest` is not merged in,
+- the login adapter, or personas/credentials, are missing.
+
 ### 1. `docshots.config.ts`
 
 ```ts
@@ -218,6 +235,7 @@ model when screenshots may contain personal data.
 ## CLI
 
 ```bash
+npx docshots init                  # create docshots.config.ts, steps/index.ts, personas.ts
 npx docshots lint                  # no browser: syntax, duplicate IDs, unknown steps (errors point to file.rst:line)
 npx docshots test                  # extract + bddgen + playwright test + manifest
 npx docshots test --grep person-create --project desktop-light-de

@@ -7,6 +7,7 @@ import { peer } from './peer';
 import type { DocshotOptions, DocshotVariant } from './fixture';
 import type { OverlayTheme } from './overlay';
 import { extractAll } from './sources/extract';
+import { checkSetup, formatWarnings } from './setup';
 import type { DocshotLanguage } from './sources/rst';
 
 export type ViewportSpec =
@@ -107,6 +108,9 @@ export function defineDocshotConfig(cfg: DocshotConfig): PlaywrightTestConfig {
       language: cfg.language ?? 'de',
     });
     process.env[EXTRACTED_ENV] = '1';
+    // missing steps entry / personas file etc. → loud warning instead of "no step definitions"
+    const warnings = checkSetup(rootDir, cfg.steps);
+    if (warnings.length) process.stderr.write(formatWarnings(warnings));
     if (process.env.DOCSHOTS_ANALYZE !== '1') {
       // leftovers of an interrupted `docshots from-image`
       fs.rmSync(path.join(workDir, 'bdd-gen', path.relative(rootDir, path.join(workDir, 'analyze'))), { recursive: true, force: true });
