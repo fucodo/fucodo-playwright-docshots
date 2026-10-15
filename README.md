@@ -388,12 +388,43 @@ To embed a video in RST, use whatever your renderer supports. With raw HTML enab
     <video controls muted src="../Videos/person-create-video/desktop-light-de.mp4"></video>
 ```
 
+## Update mode: render only what changed
+
+```bash
+npx docshots status            # what is new / changed / missing – no browser
+npx docshots update            # render only those recipes (= docshots test --changed)
+npx docshots status --check    # exit code 1 if images are outdated (CI)
+```
+
+Every scenario ("recipe") gets a fingerprint made of:
+- its steps, including the `Grundlage`/Background, tags and language,
+- the config parts that change every image: variants, output paths, theme, padding, mask colour, video, clock,
+- the package version,
+- the content of your step files (the `steps` globs).
+
+`docshots.lock.json` (configurable with `lockFile`) stores the fingerprint and the produced files
+of the last successful run. Commit it together with the images. A recipe is rendered again when:
+
+| Status | Meaning |
+|---|---|
+| `+ neu` | not in the lock file yet |
+| `~ geändert` | steps, tags, Background, config or step files changed |
+| `! Dateien fehlen` | an image or video listed in the lock file is missing |
+| `- entfernt` | the recipe is gone (images are not deleted automatically) |
+
+How it behaves:
+- The lock file is updated after **every** run (`test` and `update`), for recipes that passed in all variants that ran. Failed recipes stay outdated, so the next `update` tries them again.
+- Partial runs (`--grep`, `--project`) only record what actually ran.
+- Changes to the **application itself** (new layout, renamed buttons) cannot be seen from the steps. Run a full `docshots test` for that, e.g. nightly or before a release. Changes in page objects or fixtures outside the `steps` globs also need a full run.
+
 ## CLI
 
 ```bash
 npx docshots init                  # create docshots.config.ts, steps/index.ts, personas.ts
 npx docshots lint                  # no browser: syntax, duplicate IDs, unknown steps (errors point to file.rst:line)
-npx docshots test                  # extract + bddgen + playwright test + manifest
+npx docshots test                  # extract + bddgen + playwright test + manifest + lock file
+npx docshots update                # only new/changed recipes (see "Update mode")
+npx docshots status [--check]      # what would be rendered
 npx docshots test --grep person-create --project desktop-light-de
 npx docshots steps --out Documentation/Screenshots/Schritte.rst
 npx docshots from-image <old.png> [--url /path] [--persona name] [--insert]
@@ -410,14 +441,14 @@ docshots:lint:
   rules: [{ changes: ["Documentation/**/*"] }]
   script: [npm ci, npx docshots lint]
 
-docshots:
+docshots:                                             # merge requests: only what changed
   image: mcr.microsoft.com/playwright:v1.64.1-noble
   needs: [docshots:lint]
   variables: { BASE_URL: "$REVIEW_APP_URL" }       # seeded review environment
   before_script: [apt-get update -qq && apt-get install -y -qq ffmpeg]   # only needed for videos
-  script: [npm ci, npx docshots test]
+  script: [npm ci, npx docshots update]               # nightly / release: npx docshots test
   artifacts:
-    paths: [Documentation/Images/Screenshots, Documentation/Videos, .docshots/manifest.json, .docshots/report]
+    paths: [Documentation/Images/Screenshots, Documentation/Videos, docshots.lock.json, .docshots/manifest.json, .docshots/report]
 ```
 
 ## Stability

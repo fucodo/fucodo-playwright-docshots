@@ -56,6 +56,8 @@ export interface ManifestEntry {
   /** 'screenshot' (default) or 'video' */
   kind?: 'screenshot' | 'video';
   id: string;
+  /** the scenario this file belongs to (id without the "-<name>" of extra shots) */
+  recipe?: string;
   project: string;
   variant: DocshotVariant;
   file: string;
@@ -89,6 +91,7 @@ import { slug } from './util';
 import { AMBIGUOUS_HINT } from './steps/targets';
 export { slug };
 import { DEFAULT_VIDEO, encodeVideo, withFormat, type Frame, type Region, type VideoOptions } from './video';
+import { ONLY_ENV, RESULTS_DIR } from './update';
 
 /** Reads @id:, @viewports:, @schemes:, @lang:/@languages: tags of the current test. */
 export function readDocshotTags(tags: string[]) {
@@ -445,6 +448,7 @@ export class Docshot {
     const entry: ManifestEntry = {
       kind: 'video',
       id: rec.id,
+      recipe: this.id,
       project: testInfo.project.name,
       variant: opts.docshotVariant,
       file: out.file,
@@ -632,6 +636,7 @@ export class Docshot {
 
     const entry: ManifestEntry = {
       id,
+      recipe: this.id,
       project: testInfo.project.name,
       variant,
       file,
@@ -710,6 +715,13 @@ export const docshotTest = base.extend<DocshotOptions & DocshotFixtures>({
         (tags.schemes && !tags.schemes.includes(docshotVariant.scheme)) ||
         (tags.languages && !tags.languages.includes(docshotVariant.lang));
       testInfo.skip(Boolean(skip), `Variante ${docshotVariant.viewport}/${docshotVariant.scheme}/${docshotVariant.lang} nicht angefordert`);
+      // update mode: only recipes that changed (ids from "docshots update")
+      const only = process.env[ONLY_ENV];
+      if (only) {
+        const wanted = new Set<string>(JSON.parse(only));
+        const mine = [tags.id ? slug(tags.id) : undefined, ...testInfo.titlePath.map((t) => slug(t))].filter(Boolean) as string[];
+        testInfo.skip(!mine.some((t) => wanted.has(t)), 'unverändert (docshots update)');
+      }
       await use();
     },
     { auto: true },
@@ -729,6 +741,19 @@ export const docshotTest = base.extend<DocshotOptions & DocshotFixtures>({
       docshotOutput, docshotKeepClean, docshotVariant, docshotTheme, docshotClock, docshotPadding, docshotManifestDir, docshotMaskColor, docshotVideo,
     });
     await use(docshot);
+    // result per test for the lock file (written even if the test failed)
+    try {
+      const dir = path.join(path.dirname(docshotManifestDir), RESULTS_DIR);
+      fs.mkdirSync(dir, { recursive: true });
+      const tags = readDocshotTags(testInfo.tags);
+      const titles = [...new Set([tags.id ? slug(tags.id) : '', ...testInfo.titlePath.map((t) => slug(t))].filter(Boolean))];
+      fs.writeFileSync(
+        path.join(dir, `${slug(testInfo.testId)}.json`),
+        JSON.stringify({ titles, project: testInfo.project.name, status: testInfo.status ?? 'unknown' }),
+      );
+    } catch {
+      /* best effort */
+    }
     // a forgotten "beende das Video" must not lose the recording
     if (docshot.isRecording) {
       const msg = 'Video wurde am Ende des Szenarios automatisch beendet – Schritt "Dann beende das Video" fehlt.';

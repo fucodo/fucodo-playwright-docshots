@@ -9,6 +9,7 @@ import type { OverlayTheme } from './overlay';
 import { extractAll } from './sources/extract';
 import { checkSetup, formatWarnings } from './setup';
 import { DEFAULT_VIDEO, FFMPEG_HINT, findFfmpeg, type VideoOptions } from './video';
+import { hashFiles, sha, writeStateInput } from './update';
 import fg from 'fast-glob';
 
 const VIDEO_STEP = /\b(?:starte\b.*\b(?:Video|Aufnahme)|(?:Video|Aufnahme)\b.*\bstarte|start (?:a |the )?(?:video|recording))\b/i;
@@ -58,6 +59,11 @@ export interface DocshotConfig {
    * Default output: Documentation/Videos/{id}/{viewport}-{scheme}-{lang}.mp4
    */
   video?: Partial<VideoOptions>;
+  /**
+   * Remembers which recipes were rendered with which inputs (for "docshots update").
+   * Commit it together with the images. Default: docshots.lock.json in the project root.
+   */
+  lockFile?: string;
   /** Fill colour for masked (hidden) areas. Default '#c9ced8' */
   maskColor?: string;
   /** Padding around element screenshots. Default 16 */
@@ -137,6 +143,30 @@ export function defineDocshotConfig(cfg: DocshotConfig): PlaywrightTestConfig {
   ].map((p) => p.split(path.sep).join('/'));
 
   const { defineBddConfig } = peer<typeof PlaywrightBdd>('playwright-bdd');
+  // inputs for the update mode: everything that changes the look of every recipe
+  if (process.env.DOCSHOTS_ANALYZE !== '1') {
+    let version = '0';
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      version = require('../package.json').version;
+    } catch {
+      /* not packaged */
+    }
+    writeStateInput(workDir, {
+      rootDir,
+      workDir,
+      lockFile: path.resolve(rootDir, cfg.lockFile ?? 'docshots.lock.json'),
+      features: features.filter((f) => !f.includes('/analyze/')),
+      language: typeof cfg.language === 'string' ? cfg.language : 'de',
+      global: sha({
+        version,
+        variants: cfg.variants, output: cfg.output, keepClean: cfg.keepClean, clock: cfg.clock, theme: cfg.theme,
+        padding: cfg.padding, maskColor: cfg.maskColor, video: cfg.video, browserName: cfg.browserName,
+        steps: hashFiles(rootDir, cfg.steps),
+      }),
+    });
+  }
+
   const testDir = defineBddConfig({
     features,
     steps: cfg.steps.map((p) => path.resolve(rootDir, p).split(path.sep).join('/')),

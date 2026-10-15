@@ -7,11 +7,14 @@ import { VOCABULARY } from './steps/vocabulary';
 import { fromImage } from './ai/command';
 import { peerLocations } from './peer';
 import { initProject } from './setup';
+import { collectRecipes, compare, ONLY_ENV, readLock, readStateInput, RESULTS_DIR, updateLock, type RecipeStatus } from './update';
 import type { DocshotLanguage } from './sources/rst';
 
 const HELP = `docshots – Doku-Screenshots aus Gherkin-Schritten
 
-  docshots test     [-c docshots.config.ts] [playwright args…]   extrahieren, generieren, Screenshots erstellen
+  docshots test     [-c docshots.config.ts] [--changed] [playwright args…]   extrahieren, generieren, Screenshots erstellen
+  docshots update   [playwright args…]                            nur neue/geänderte Rezepte rendern (= test --changed)
+  docshots status   [--check]                                     zeigen, welche Rezepte neu/geändert sind (kein Browser)
   docshots lint     [-c docshots.config.ts]                       nur prüfen: Syntax, IDs, unbekannte Schritte (kein Browser)
   docshots steps    [-c docshots.config.ts] [--out Datei.rst] [--lang de|en]   Schritt-Übersicht als RST schreiben
   docshots manifest [--work-dir .docshots]                        manifest.json aus dem letzten Lauf zusammenführen
@@ -98,6 +101,33 @@ async function hintIfMissingSteps(output: string, config: string) {
   process.stderr.write(`\n✘ Es sind überhaupt keine Schritt-Definitionen registriert. Mögliche Ursachen:\n${problems.join('\n')}\n\n`);
 }
 
+function printStatus(statuses: RecipeStatus[], removed: string[], rootDir: string, all = false) {
+  const icon: Record<RecipeStatus['reason'], string> = { neu: '+', geändert: '~', 'Dateien fehlen': '!', unverändert: '=' };
+  for (const st of statuses) {
+    if (st.reason === 'unverändert' && !all) continue;
+    const missing = st.missing ? ` (${st.missing.length} fehlen, z. B. ${st.missing[0]})` : '';
+    console.log(`  ${icon[st.reason]} ${st.recipe.id.padEnd(32)} ${st.reason}${missing}  ← ${st.recipe.file}`);
+  }
+  for (const id of removed) console.log(`  - ${id.padEnd(32)} entfernt (Bilder ggf. von Hand löschen)`);
+  void rootDir;
+}
+
+/** Removes per-capture manifest entries of the recipes that are about to run (all, if ids is undefined). */
+function clearManifestEntries(workDir: string, ids?: Set<string>) {
+  const dir = path.resolve(workDir, 'manifest');
+  if (!fs.existsSync(dir)) return;
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json'))) {
+    const file = path.join(dir, f);
+    if (!ids) { fs.rmSync(file); continue; }
+    try {
+      const e = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (ids.has(e.recipe ?? e.id)) fs.rmSync(file);
+    } catch {
+      fs.rmSync(file);
+    }
+  }
+}
+
 function mergeManifest(workDir: string): string | undefined {
   const dir = path.resolve(workDir, 'manifest');
   if (!fs.existsSync(dir)) return undefined;
@@ -172,16 +202,57 @@ async function main() {
       process.exit(r.code);
     }
     // falls through
+    case 'update':
     case 'test': {
+      // update mode: only new/changed recipes and recipes with missing files
+      const changedOnly = command === 'update' || rest.includes('--changed');
+      const pwArgs = rest.filter((a) => a !== '--changed');
       const gen = await run(binOf('playwright-bdd', 'bddgen'), ['-c', config], workDir);
       if (gen.code !== 0) {
         await hintIfMissingSteps(gen.output, config);
         process.exit(gen.code);
       }
-      const pw = await run(binOf('@playwright/test', 'playwright'), ['test', '-c', config, ...rest], workDir);
+      const input = readStateInput(path.resolve(workDir));
+      const recipes = collectRecipes(input);
+
+      let run_ids: Set<string> | undefined;
+      if (changedOnly) {
+        const { statuses, removed } = compare(recipes, readLock(input.lockFile), input.rootDir);
+        const todo = statuses.filter((st) => st.reason !== 'unverändert');
+        printStatus(statuses, removed, input.rootDir);
+        if (!todo.length) {
+          console.log('\n✔ Alles aktuell – nichts zu rendern.');
+          process.exit(0);
+        }
+        run_ids = new Set(todo.map((t) => t.recipe.id));
+        process.env[ONLY_ENV] = JSON.stringify([...run_ids]);
+        console.log(`\n→ Rendere ${run_ids.size} von ${recipes.length} Rezepten …\n`);
+      }
+
+      // fresh results; manifest entries of the recipes that run now are replaced
+      fs.rmSync(path.resolve(workDir, RESULTS_DIR), { recursive: true, force: true });
+      clearManifestEntries(workDir, run_ids);
+
+      const pw = await run(binOf('@playwright/test', 'playwright'), ['test', '-c', config, ...pwArgs], workDir);
+      const { updated, failed } = updateLock(input, recipes, run_ids);
+      const rel = path.relative(process.cwd(), input.lockFile) || input.lockFile;
+      if (updated.length) console.log(`\n${rel}: ${updated.length} Rezept(e) aktualisiert.`);
+      if (failed.length) console.log(`Nicht aktualisiert (fehlgeschlagen): ${failed.join(', ')}`);
       const manifest = mergeManifest(workDir);
       if (manifest) console.log(`Manifest: ${path.relative(process.cwd(), manifest)}`);
       process.exit(pw.code);
+    }
+    // falls through
+    case 'status': {
+      const gen = await run(binOf('playwright-bdd', 'bddgen'), ['-c', config], workDir);
+      if (gen.code !== 0) process.exit(gen.code);
+      const input = readStateInput(path.resolve(workDir));
+      const { statuses, removed } = compare(collectRecipes(input), readLock(input.lockFile), input.rootDir);
+      printStatus(statuses, removed, input.rootDir, true);
+      const todo = statuses.filter((st) => st.reason !== 'unverändert').length;
+      console.log(todo ? `\n${todo} Rezept(e) zu rendern: npx docshots update` : '\n✔ Alles aktuell.');
+      // --check: fail in CI when images are outdated
+      process.exit(rest.includes('--check') && (todo || removed.length) ? 1 : 0);
     }
     // falls through
     case 'steps': {

@@ -14,3 +14,4 @@ export type { OverlayTheme, MarkStyle, OverlayLayout, CaptureMode } from './over
 export { checkSetup, initProject, formatWarnings, type SetupWarning, type InitOptions, type InitResult } from './setup';
 export { encodeVideo, findFfmpeg, DEFAULT_VIDEO, type VideoOptions } from './video';
 export type { VideoStartOptions } from './fixture';
+export { collectRecipes, compare, readLock, updateLock, type Recipe, type LockFile, type RecipeStatus } from './update';

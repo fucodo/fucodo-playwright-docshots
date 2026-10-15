@@ -1,0 +1,272 @@
+{
+  "version": 1,
+  "recipes": {
+    "area-landmark": {
+      "fingerprint": "35b0cf65bec9af48",
+      "files": [
+        "Documentation/Images/Screenshots/area-landmark/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/area-landmark/desktop-light-de.png",
+        "Documentation/Images/Screenshots/area-landmark/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/area-landmark/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/area-shots.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "area-named": {
+      "fingerprint": "9e26ff6467d5ee85",
+      "files": [
+        "Documentation/Images/Screenshots/area-named/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/area-named/desktop-light-de.png",
+        "Documentation/Images/Screenshots/area-named/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/area-named/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/area-shots.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "area-selector": {
+      "fingerprint": "d8196e52cf9ca70b",
+      "files": [
+        "Documentation/Images/Screenshots/area-selector/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/area-selector/desktop-light-de.png",
+        "Documentation/Images/Screenshots/area-selector/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/area-selector/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/area-shots.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "area-work-dialog": {
+      "fingerprint": "6bf037654316dea1",
+      "files": [
+        "Documentation/Images/Screenshots/area-work-dialog/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/area-work-dialog/desktop-light-de.png",
+        "Documentation/Images/Screenshots/area-work-dialog/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/area-work-dialog/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/area-work.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "area-work-footer": {
+      "fingerprint": "740a5ad8c4feeb23",
+      "files": [
+        "Documentation/Images/Screenshots/area-work-footer-oben/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/area-work-footer-oben/desktop-light-de.png",
+        "Documentation/Images/Screenshots/area-work-footer-oben/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/area-work-footer-oben/mobile-light-de.png",
+        "Documentation/Images/Screenshots/area-work-footer/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/area-work-footer/desktop-light-de.png",
+        "Documentation/Images/Screenshots/area-work-footer/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/area-work-footer/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/area-work.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "person-create": {
+      "fingerprint": "6f8b90bde2612cc2",
+      "files": [
+        "Documentation/Images/Screenshots/person-create/desktop-dark-de.clean.png",
+        "Documentation/Images/Screenshots/person-create/desktop-dark-de.png",
+        "Documentation/Images/Screenshots/person-create/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/person-create/desktop-light-de.png",
+        "Documentation/Images/Screenshots/person-create/mobile-dark-de.clean.png",
+        "Documentation/Images/Screenshots/person-create/mobile-dark-de.png",
+        "Documentation/Images/Screenshots/person-create/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/person-create/mobile-light-de.png"
+      ],
+      "source": ".docshots/generated/Documentation/Admin/Persons.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "person-create-en": {
+      "fingerprint": "6779e6d97c44fffe",
+      "files": [
+        "Documentation/Images/Screenshots/person-create-en/desktop-light-en.clean.png",
+        "Documentation/Images/Screenshots/person-create-en/desktop-light-en.png"
+      ],
+      "source": ".docshots/generated/Documentation/Admin/Persons.en.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "person-create-flow": {
+      "fingerprint": "c53fa530e89cbffd",
+      "files": [
+        "Documentation/Images/Screenshots/person-create-flow-ausgefuellt/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/person-create-flow-ausgefuellt/desktop-light-de.png",
+        "Documentation/Images/Screenshots/person-create-flow-ausgefuellt/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/person-create-flow-ausgefuellt/mobile-light-de.png",
+        "Documentation/Images/Screenshots/person-create-flow-leer/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/person-create-flow-leer/desktop-light-de.png",
+        "Documentation/Images/Screenshots/person-create-flow-leer/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/person-create-flow-leer/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/person-create-flow.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "person-create-video": {
+      "fingerprint": "bfbc80ade905608a",
+      "files": [
+        "Documentation/Videos/person-create-video/desktop-light-de.mp4",
+        "Documentation/Videos/person-create-video/mobile-light-de.mp4"
+      ],
+      "source": "Documentation/Screenshots/person-create-video.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "person-form-video": {
+      "fingerprint": "a6bb2c08678c1593",
+      "files": [
+        "Documentation/Images/Screenshots/person-form-video-mitten-im-video/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/person-form-video-mitten-im-video/desktop-light-de.png",
+        "Documentation/Images/Screenshots/person-form-video-mitten-im-video/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/person-form-video-mitten-im-video/mobile-light-de.png",
+        "Documentation/Videos/person-form-video/desktop-light-de.mp4",
+        "Documentation/Videos/person-form-video/mobile-light-de.mp4"
+      ],
+      "source": "Documentation/Screenshots/person-create-video.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "persons-list": {
+      "fingerprint": "9fb7e4058190c88a",
+      "files": [
+        "Documentation/Images/Screenshots/persons-list/desktop-dark-de.clean.png",
+        "Documentation/Images/Screenshots/persons-list/desktop-dark-de.png",
+        "Documentation/Images/Screenshots/persons-list/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/persons-list/desktop-light-de.png",
+        "Documentation/Images/Screenshots/persons-list/mobile-dark-de.clean.png",
+        "Documentation/Images/Screenshots/persons-list/mobile-dark-de.png",
+        "Documentation/Images/Screenshots/persons-list/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/persons-list/mobile-light-de.png"
+      ],
+      "source": ".docshots/generated/Documentation/Admin/Persons.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "persons-menu": {
+      "fingerprint": "fd50b46aabdca98e",
+      "files": [
+        "Documentation/Images/Screenshots/persons-menu/desktop-dark-de.clean.png",
+        "Documentation/Images/Screenshots/persons-menu/desktop-dark-de.png",
+        "Documentation/Images/Screenshots/persons-menu/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/persons-menu/desktop-light-de.png"
+      ],
+      "source": "Documentation/Admin/Persons.rst:9",
+      "updated": "2026-10-15T12:40:26.814Z"
+    },
+    "scroll-top-app": {
+      "fingerprint": "4e21d79b01250f2e",
+      "files": [
+        "Documentation/Images/Screenshots/scroll-top-app/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/scroll-top-app/desktop-light-de.png",
+        "Documentation/Images/Screenshots/scroll-top-app/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/scroll-top-app/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/scroll-top.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "scroll-top-video": {
+      "fingerprint": "08a350d7002baef9",
+      "files": [
+        "Documentation/Images/Screenshots/scroll-top-video-oben/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/scroll-top-video-oben/desktop-light-de.png",
+        "Documentation/Images/Screenshots/scroll-top-video-oben/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/scroll-top-video-oben/mobile-light-de.png",
+        "Documentation/Videos/scroll-top-video/desktop-light-de.mp4",
+        "Documentation/Videos/scroll-top-video/mobile-light-de.mp4"
+      ],
+      "source": "Documentation/Screenshots/scroll-top.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "scroll-top-window": {
+      "fingerprint": "c4566bc708d506fc",
+      "files": [
+        "Documentation/Images/Screenshots/scroll-top-window/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/scroll-top-window/desktop-light-de.png",
+        "Documentation/Images/Screenshots/scroll-top-window/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/scroll-top-window/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/scroll-top.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "status-feeds": {
+      "fingerprint": "c1647f7ebf34e548",
+      "files": [
+        "Documentation/Images/Screenshots/status-feeds/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/status-feeds/desktop-light-de.png",
+        "Documentation/Images/Screenshots/status-feeds/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/status-feeds/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/status-feeds.feature",
+      "updated": "2026-10-15T12:39:20.649Z"
+    },
+    "status-feeds-auto": {
+      "fingerprint": "298fe6128d38c4cb",
+      "files": [
+        "Documentation/Images/Screenshots/status-feeds-auto/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/status-feeds-auto/desktop-light-de.png",
+        "Documentation/Images/Screenshots/status-feeds-auto/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/status-feeds-auto/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/status-feeds.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "status-feeds-video": {
+      "fingerprint": "ae537dbc0f1116b2",
+      "files": [
+        "Documentation/Videos/status-feeds-video/desktop-light-de.mp4",
+        "Documentation/Videos/status-feeds-video/mobile-light-de.mp4"
+      ],
+      "source": "Documentation/Screenshots/status-feeds.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "status-impressum-footer": {
+      "fingerprint": "d104e1c67f444e75",
+      "files": [
+        "Documentation/Images/Screenshots/status-impressum-footer/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/status-impressum-footer/desktop-light-de.png",
+        "Documentation/Images/Screenshots/status-impressum-footer/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/status-impressum-footer/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/status-impressum.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "status-impressum-header": {
+      "fingerprint": "71143041c84ef297",
+      "files": [
+        "Documentation/Images/Screenshots/status-impressum-header/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/status-impressum-header/desktop-light-de.png",
+        "Documentation/Images/Screenshots/status-impressum-header/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/status-impressum-header/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/status-impressum.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "status-impressum-last": {
+      "fingerprint": "3e49dd4c4f2c78d8",
+      "files": [
+        "Documentation/Images/Screenshots/status-impressum-last/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/status-impressum-last/desktop-light-de.png",
+        "Documentation/Images/Screenshots/status-impressum-last/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/status-impressum-last/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/status-impressum.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "stress-cluster": {
+      "fingerprint": "09b6155d39476093",
+      "files": [
+        "Documentation/Images/Screenshots/stress-cluster/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/stress-cluster/desktop-light-de.png",
+        "Documentation/Images/Screenshots/stress-cluster/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/stress-cluster/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/overlay-stress.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    },
+    "stress-corners": {
+      "fingerprint": "a2d298814b5fdf2b",
+      "files": [
+        "Documentation/Images/Screenshots/stress-corners/desktop-light-de.clean.png",
+        "Documentation/Images/Screenshots/stress-corners/desktop-light-de.png",
+        "Documentation/Images/Screenshots/stress-corners/mobile-light-de.clean.png",
+        "Documentation/Images/Screenshots/stress-corners/mobile-light-de.png"
+      ],
+      "source": "Documentation/Screenshots/overlay-stress.feature",
+      "updated": "2026-10-15T12:38:44.701Z"
+    }
+  }
+}
