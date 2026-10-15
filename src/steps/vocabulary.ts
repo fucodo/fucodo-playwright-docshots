@@ -22,7 +22,7 @@ export type VocabArgs = Record<string, string | undefined>;
 export interface VocabEntry {
   key: string;
   keyword: 'Given' | 'When' | 'Then';
-  group: 'Anmeldung' | 'Navigation' | 'Eingaben' | 'Warten' | 'Markieren' | 'Screenshot';
+  group: 'Anmeldung' | 'Navigation' | 'Eingaben' | 'Warten' | 'Markieren' | 'Screenshot' | 'Video';
   patterns: Record<DocshotLanguage, RegExp[]>;
   examples: Record<DocshotLanguage, string[]>;
   run(ctx: VocabContext, args: VocabArgs): Promise<void>;
@@ -246,10 +246,44 @@ export const VOCABULARY: VocabEntry[] = [
     key: 'mask', keyword: 'Then', group: 'Markieren',
     patterns: {
       de: [re('(?:ich )?(?:verdecke|verpixele|schwärze) ', T)],
-      en: [re('(?:I )?(?:mask|hide|blur) ', T)],
+      en: [re('(?:I )?(?:mask|blur) ', T)],
     },
     examples: { de: ['Und verdecke das Feld "E-Mail"'], en: ['And mask the field "Email"'] },
     run: async (ctx, a) => { ctx.docshot.mask(target(ctx, a)); },
+  },
+
+  {
+    key: 'hideMarksAll', keyword: 'Then', group: 'Markieren',
+    patterns: {
+      de: [re('(?:ich )?(?:blende|entferne) (?:alle |die )?(?:Markierungen|Markierung) aus'), re('(?:ich )?entferne (?:alle |die )?Markierungen')],
+      en: [re('(?:I )?(?:hide|remove|clear) (?:all |the )?(?:markers|marks|highlights)')],
+    },
+    examples: { de: ['Und blende die Markierungen aus', 'Und entferne alle Markierungen'], en: ['And hide the markers'] },
+    run: async (ctx) => { await ctx.docshot.hideMarks(); },
+  },
+  {
+    key: 'hideMarkLabel', keyword: 'Then', group: 'Markieren',
+    patterns: {
+      de: [
+        re('(?:ich )?blende (?:die )?Markierung (?:mit der Nummer )?', Q('label'), ' aus'),
+        re('(?:ich )?entferne (?:die )?Markierung (?:mit der Nummer )?', Q('label')),
+      ],
+      en: [re('(?:I )?(?:hide|remove) (?:the )?marker (?:with (?:label |number )?)?', Q('label'))],
+    },
+    examples: { de: ['Und blende die Markierung "1" aus', 'Und entferne die Markierung "2"'], en: ['And hide the marker "1"'] },
+    run: async (ctx, a) => { await ctx.docshot.hideMarks({ label: a.label }); },
+  },
+  {
+    key: 'hideMarkTarget', keyword: 'Then', group: 'Markieren',
+    patterns: {
+      de: [
+        re('(?:ich )?blende (?:die )?Markierung (?:von|vom|auf) ', T, ' aus'),
+        re('(?:ich )?entferne (?:die )?Markierung (?:von|vom|auf) ', T),
+      ],
+      en: [re('(?:I )?(?:hide|remove) (?:the )?marker (?:of|on|from) ', T)],
+    },
+    examples: { de: ['Und entferne die Markierung vom Feld "Vorname"'], en: ['And remove the marker of the field "First name"'] },
+    run: async (ctx, a) => { await ctx.docshot.hideMarks({ description: `${a.kind} "${a.name}"` }); },
   },
 
   // ── Screenshot ───────────────────────────────────────────────────────────
@@ -275,6 +309,43 @@ export const VOCABULARY: VocabEntry[] = [
     run: async (ctx, a) => {
       await ctx.docshot.capture({ name: opt(a.shot), target: a.kind ? target(ctx, a) : undefined });
     },
+  },
+
+  // ── Video ────────────────────────────────────────────────────────────────
+  {
+    key: 'videoStart', keyword: 'When', group: 'Video',
+    patterns: {
+      de: [
+        re('(?:ich )?starte (?:ein |das |die )?(?:Video|Aufnahme|Videoaufnahme)(?: ', Q('shot'), ')?(?: (?:von|vom) ', T, ')?'),
+        re('ich (?:ein |das |die )?(?:Video|Aufnahme|Videoaufnahme)(?: ', Q('shot'), ')?(?: (?:von|vom) ', T, ')? starte'),
+      ],
+      en: [re('(?:I )?start (?:a |the )?(?:video|recording)(?: ', Q('shot'), ')?(?: of ', T, ')?')],
+    },
+    examples: {
+      de: ['Dann starte ein Video', 'Dann starte ein Video vom Formular "Person anlegen"', 'Wenn ich ein Video "ausfuellen" vom Dialog "Person anlegen" starte'],
+      en: ['When I start a video', 'When I start a video of the form "Create person"'],
+    },
+    run: async (ctx, a) => {
+      await ctx.docshot.startVideo({ name: opt(a.shot), target: a.kind ? target(ctx, a) : undefined });
+    },
+  },
+  {
+    key: 'videoStop', keyword: 'Then', group: 'Video',
+    patterns: {
+      de: [re('(?:ich )?(?:beende|stoppe) (?:das |die )?(?:Video|Aufnahme|Videoaufnahme)'), re('ich (?:das |die )?(?:Video|Aufnahme|Videoaufnahme) (?:beende|stoppe)')],
+      en: [re('(?:I )?(?:stop|end|finish) (?:the )?(?:video|recording)')],
+    },
+    examples: { de: ['Dann beende das Video', 'Wenn ich das Video beende'], en: ['Then stop the video'] },
+    run: async (ctx) => { await ctx.docshot.stopVideo(); },
+  },
+  {
+    key: 'videoTitle', keyword: 'When', group: 'Video',
+    patterns: {
+      de: [re('(?:ich )?(?:zeige|blende) (?:den |einen )?Titel ', Q('title'), '(?: mit (?:der )?Beschreibung ', Q('desc'), ')?(?: ein)?')],
+      en: [re('(?:I )?show (?:the |a )?title ', Q('title'), '(?: with (?:the )?description ', Q('desc'), ')?')],
+    },
+    examples: { de: ['Und zeige den Titel "Person anlegen" mit der Beschreibung "In drei Schritten"'], en: ['And show the title "Create a person"'] },
+    run: async (ctx, a) => { await ctx.docshot.showTitle(a.title!, opt(a.desc)); },
   },
 ];
 

@@ -31,6 +31,10 @@ export interface DocshotAdapters {
 
 type FixturesWithDocshot = { page: Page; docshot: Docshot };
 
+const STEP_KIND: Record<string, 'action' | 'mark' | 'wait' | 'other'> = {
+  Anmeldung: 'action', Navigation: 'action', Eingaben: 'action', Markieren: 'mark', Warten: 'wait',
+};
+
 /**
  * Registers the built-in vocabulary against *your* test object, so built-in
  * and project steps share the same fixtures.
@@ -70,6 +74,8 @@ export function registerDocshotSteps<T extends TestType<any, any>>(test: T, adap
           const args: Record<string, string | undefined> = {};
           names.forEach((n, i) => (args[n] = values[i] ?? undefined));
           await entry.run(contextFor({ page, docshot }), args);
+          // while a video records: keep live markers on their elements and give viewers time
+          await docshot.afterStep(STEP_KIND[entry.group] ?? 'other');
         };
         // keep playwright-bdd's arity check happy for the rest parameter: fixtures + one per group
         Object.defineProperty(fn, 'length', { value: names.length + 1 });

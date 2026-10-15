@@ -264,6 +264,68 @@ If a layout still has problems because there was no free space, the test gets a
 The final geometry is stored per image in `.docshots/manifest.json` (`layout`), and
 `layoutProblems()` is exported for your own checks.
 
+## Videos
+
+The same steps that build screenshots can record videos. Start and stop anywhere in a scenario:
+
+```gherkin
+Szenario: person-create-video
+  Angenommen ich bin angemeldet als "schooladmin"
+  Und ich bin in der Personenverwaltung
+  Dann starte ein Video                                   # whole viewport
+  Und zeige den Titel "Person anlegen" mit der Beschreibung "In drei Schritten"
+  Und zeige mit einem Pfeil auf den Button "Neue Person" und mit "1" und dem Hinweis "Hier starten"
+  Wenn ich auf den Button "Neue Person" klicke
+  Und blende die Markierungen aus
+  Und ich fülle das Feld "Vorname" mit "Max" aus
+  Und markiere das Feld "Vorname" mit "2"
+  Und blende die Markierung "2" aus
+  Und markiere den Button "Speichern" mit "3" und Hinweis "Zum Abschluss"
+  Dann beende das Video
+```
+
+- `Dann starte ein Video vom Formular "Person anlegen"` crops the video to an element, like element screenshots. The crop is fixed when recording starts, so the element should not move.
+- `Wenn ich ein Video "teil-2" … starte` names it; a scenario can record several videos one after another (`<id>-<name>`).
+- While recording, markers and masks appear immediately and follow their elements after clicks.
+- Markers are removed with `blende die Markierungen aus` (all), `blende die Markierung "2" aus` (by number) or `entferne die Markierung vom Feld "Vorname"` (by target). These steps also work before screenshots.
+- `zeige den Titel "…"` shows a title card. It only appears while a video is recording; in screenshots it does nothing.
+- An animated mouse pointer shows clicks. After each action the video pauses (`stepDelay`), and after markers change it pauses longer (`markDelay`), so viewers can follow.
+- Screenshots in the middle of a video work. The video simply doesn't show the moment of the screenshot.
+- A missing `Dann beende das Video` doesn't lose the recording: it is saved at the end of the scenario, with a warning.
+
+Videos are rendered per variant (viewport × theme × language), like screenshots, and listed in
+`.docshots/manifest.json` with `"kind": "video"`, duration and size.
+
+```ts
+// docshots.config.ts
+video: {
+  output: 'Documentation/Videos/{id}/{viewport}-{scheme}-{lang}.mp4',
+  format: 'mp4',        // 'mp4' (H.264, plays everywhere) or 'webm' (VP9)
+  fps: 25,
+  cursor: true,         // animated pointer and click marks
+  stepDelay: 700,       // pause after each action (ms)
+  markDelay: 1200,      // pause after markers change (ms)
+  hold: 800,            // still frames at start and end (ms)
+  padding: 48,          // around element videos (px)
+  // ffmpeg: '/usr/bin/ffmpeg',
+},
+```
+
+**Requirements**
+- **Playwright 1.59 or newer** for `page.screencast`.
+- **ffmpeg.** The system ffmpeg is used (`apt install ffmpeg`, or in the official Playwright Docker image install it with apt). Alternatives are `npm i -D ffmpeg-static`, or `DOCSHOTS_FFMPEG=/path/to/ffmpeg`. Playwright's own bundled ffmpeg is not needed. `docshots lint` warns when scenarios record videos and no ffmpeg is found.
+
+Videos are recorded at CSS pixel size (1×), so a 1280×800 desktop viewport gives a 1280×800 video
+even with `deviceScaleFactor: 2`.
+
+To embed a video in RST, use whatever your renderer supports. With raw HTML enabled, for example:
+
+```rst
+..  raw:: html
+
+    <video controls muted src="../Videos/person-create-video/desktop-light-de.mp4"></video>
+```
+
 ## CLI
 
 ```bash
@@ -290,9 +352,10 @@ docshots:
   image: mcr.microsoft.com/playwright:v1.64.1-noble
   needs: [docshots:lint]
   variables: { BASE_URL: "$REVIEW_APP_URL" }       # seeded review environment
+  before_script: [apt-get update -qq && apt-get install -y -qq ffmpeg]   # only needed for videos
   script: [npm ci, npx docshots test]
   artifacts:
-    paths: [Documentation/Images/Screenshots, .docshots/manifest.json, .docshots/report]
+    paths: [Documentation/Images/Screenshots, Documentation/Videos, .docshots/manifest.json, .docshots/report]
 ```
 
 ## Stability
@@ -308,6 +371,8 @@ promoted into the top layer, so they appear above modal `<dialog>`s and popovers
 
 ## Programmatic API
 
-`docshot.highlight(locator, { label, note })`, `docshot.pointAt(…)`, `docshot.mask(…)` and
-`docshot.capture({ target, fullPage, name })` are available to your own steps
-through the `docshot` fixture.
+Your own steps can use these through the `docshot` fixture:
+- `docshot.highlight(locator, { label, note })`, `docshot.pointAt(…)` and `docshot.mask(…)`,
+- `docshot.hideMarks({ label } | { description })`,
+- `docshot.capture({ target, fullPage, name })`,
+- `docshot.startVideo({ target, name })`, `docshot.showTitle(title, description)` and `docshot.stopVideo()`.

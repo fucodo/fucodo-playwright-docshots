@@ -59,6 +59,11 @@ Markieren
     Dann zeige mit einem Pfeil auf das Feld "Suche" und mit "2"
     Dann zeige mit einem Pfeil auf den Link "Hilfe" und mit "2" und dem Hinweis "Pflichtfeld"
     Und verdecke das Feld "E-Mail"
+    Und blende die Markierungen aus
+    Und entferne alle Markierungen
+    Und blende die Markierung "1" aus
+    Und entferne die Markierung "2"
+    Und entferne die Markierung vom Feld "Vorname"
 
 Screenshot
 ----------
@@ -69,6 +74,18 @@ Screenshot
     Dann erstelle einen Screenshot
     Dann erstelle einen Screenshot vom Formular "Person anlegen"
     Dann erstelle einen Screenshot "schritt-2" von dem Dialog "Mitgliedschaft hinzufügen"
+
+Video
+-----
+
+..  code-block:: gherkin
+
+    Dann starte ein Video
+    Dann starte ein Video vom Formular "Person anlegen"
+    Wenn ich ein Video "ausfuellen" vom Dialog "Person anlegen" starte
+    Dann beende das Video
+    Wenn ich das Video beende
+    Und zeige den Titel "Person anlegen" mit der Beschreibung "In drei Schritten"
 
 Projektspezifische Schritte
 ---------------------------

@@ -24,4 +24,5 @@ export default defineDocshotConfig({
   keepClean: true,
   clock: '2026-09-15T09:30:00+02:00',
   theme: { color: '#d50c2f' },
+  video: { format: 'mp4', cursor: true },
 });

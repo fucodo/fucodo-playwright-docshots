@@ -65,8 +65,13 @@ export function drawOverlaysInPage(args: {
   attr: string;
   mode?: CaptureMode;
   bounds?: Rect;
+  /** drawn as solid boxes – for videos, where Playwright's screenshot masks do not apply */
+  masks?: Rect[];
+  maskColor?: string;
 }): OverlayLayout {
   const { marks, theme, attr } = args;
+  // replace an existing layer in the same task – no frame can show the page without markers
+  document.querySelectorAll(`[${attr}]`).forEach((n) => n.remove());
   const mode = args.mode ?? (args.bounds ? 'crop' : 'viewport');
   type P = { x: number; y: number };
   type Box = { x: number; y: number; w: number; h: number };
@@ -329,6 +334,10 @@ export function drawOverlaysInPage(args: {
 
   const decorations: { mark: number; box: Rect }[] = [];
   const toRect = (b: Box): Rect => ({ x: b.x, y: b.y, width: b.w, height: b.h });
+
+  for (const m of args.masks ?? []) {
+    el('rect', { x: m.x, y: m.y, width: m.width, height: m.height, fill: args.maskColor ?? '#c9ced8' });
+  }
 
   marks.forEach((m, i) => {
     const b = markBoxes[i];

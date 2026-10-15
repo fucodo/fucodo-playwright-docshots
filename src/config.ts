@@ -8,6 +8,10 @@ import type { DocshotOptions, DocshotVariant } from './fixture';
 import type { OverlayTheme } from './overlay';
 import { extractAll } from './sources/extract';
 import { checkSetup, formatWarnings } from './setup';
+import { DEFAULT_VIDEO, FFMPEG_HINT, findFfmpeg, type VideoOptions } from './video';
+import fg from 'fast-glob';
+
+const VIDEO_STEP = /\b(?:starte\b.*\b(?:Video|Aufnahme)|(?:Video|Aufnahme)\b.*\bstarte|start (?:a |the )?(?:video|recording))\b/i;
 import type { DocshotLanguage } from './sources/rst';
 
 export type ViewportSpec =
@@ -49,6 +53,11 @@ export interface DocshotConfig {
   clock?: string;
   /** Overlay colors, e.g. { color: '#d50c2f' } */
   theme?: Partial<OverlayTheme>;
+  /**
+   * Videos ("Dann starte ein Video" … "Dann beende das Video").
+   * Default output: Documentation/Videos/{id}/{viewport}-{scheme}-{lang}.mp4
+   */
+  video?: Partial<VideoOptions>;
   /** Fill colour for masked (hidden) areas. Default '#c9ced8' */
   maskColor?: string;
   /** Padding around element screenshots. Default 16 */
@@ -100,7 +109,7 @@ export function defineDocshotConfig(cfg: DocshotConfig): PlaywrightTestConfig {
 
   // Extract once in the main process; workers inherit the env flag.
   if (!process.env[EXTRACTED_ENV]) {
-    extractAll({
+    const extracted = extractAll({
       rootDir,
       rstPatterns: cfg.sources.rst ?? [],
       featurePatterns: cfg.sources.features ?? [],
@@ -110,6 +119,9 @@ export function defineDocshotConfig(cfg: DocshotConfig): PlaywrightTestConfig {
     process.env[EXTRACTED_ENV] = '1';
     // missing steps entry / personas file etc. → loud warning instead of "no step definitions"
     const warnings = checkSetup(rootDir, cfg.steps);
+    const scenarioFiles = [...extracted.generatedFiles, ...fg.sync(cfg.sources.features ?? [], { cwd: rootDir, absolute: true })];
+    const usesVideo = scenarioFiles.some((f) => VIDEO_STEP.test(fs.readFileSync(f, 'utf8')));
+    if (usesVideo && !findFfmpeg(cfg.video?.ffmpeg)) warnings.push({ message: 'Szenarien nehmen Videos auf, aber ffmpeg wurde nicht gefunden.', hint: FFMPEG_HINT });
     if (warnings.length) process.stderr.write(formatWarnings(warnings));
     if (process.env.DOCSHOTS_ANALYZE !== '1') {
       // leftovers of an interrupted `docshots from-image`
@@ -159,6 +171,11 @@ export function defineDocshotConfig(cfg: DocshotConfig): PlaywrightTestConfig {
           docshotPadding: cfg.padding ?? 16,
           docshotManifestDir: path.join(workDir, 'manifest'),
           docshotMaskColor: cfg.maskColor ?? '#c9ced8',
+          docshotVideo: {
+            ...DEFAULT_VIDEO,
+            ...cfg.video,
+            output: path.resolve(rootDir, cfg.video?.output ?? DEFAULT_VIDEO.output),
+          },
         };
         projects.push({
           name: `${vpName}-${scheme}-${lang}`,

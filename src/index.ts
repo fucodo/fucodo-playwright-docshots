@@ -12,3 +12,5 @@ export { parseRst, toFeature, DocshotSourceError, type DocshotLanguage } from '.
 export { layoutProblems } from './overlay';
 export type { OverlayTheme, MarkStyle, OverlayLayout, CaptureMode } from './overlay';
 export { checkSetup, initProject, formatWarnings, type SetupWarning, type InitOptions, type InitResult } from './setup';
+export { encodeVideo, findFfmpeg, DEFAULT_VIDEO, type VideoOptions } from './video';
+export type { VideoStartOptions } from './fixture';
