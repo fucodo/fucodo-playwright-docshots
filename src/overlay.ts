@@ -430,11 +430,6 @@ export function drawOverlaysInPage(args: {
   svg.setAttribute('width', String(width));
   svg.setAttribute('height', String(height));
   svg.setAttribute('style', 'position:absolute;left:0;top:0;overflow:visible');
-  const defs = document.createElementNS(NS, 'defs');
-  defs.innerHTML =
-    `<marker id="docshot-arrowhead" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">` +
-    `<path d="M0,0 L10,5 L0,10 z" fill="${theme.color}"/></marker>`;
-  svg.appendChild(defs);
   const el = (name: string, attrs: Record<string, string | number>) => {
     const node = document.createElementNS(NS, name);
     for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
@@ -471,9 +466,26 @@ export function drawOverlaysInPage(args: {
       }
     } else {
       const plan = arrowPlan[i]!;
-      const line = { x1: plan.tail.x, y1: plan.tail.y, x2: plan.tip.x, y2: plan.tip.y, 'stroke-linecap': 'round' };
-      el('line', { ...line, stroke: '#fff', 'stroke-width': 9, 'stroke-opacity': 0.9 });
-      el('line', { ...line, stroke: theme.color, 'stroke-width': 4, 'marker-end': 'url(#docshot-arrowhead)' });
+      // shaft + head as separate shapes, both with the same white outline (a SVG marker cannot get one)
+      const dx = plan.tip.x - plan.tail.x, dy = plan.tip.y - plan.tail.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len, uy = dy / len;   // along the arrow
+      const nx = -uy, ny = ux;              // across
+      const HL = 18, HW = 10;               // head length, half width
+      const base = { x: plan.tip.x - ux * HL, y: plan.tip.y - uy * HL };
+      const head = [
+        `${plan.tip.x},${plan.tip.y}`,
+        `${base.x + nx * HW},${base.y + ny * HW}`,
+        `${base.x - nx * HW},${base.y - ny * HW}`,
+      ].join(' ');
+      // the shaft stops inside the head, so its round cap never shows past the tip
+      const shaftEnd = { x: base.x + ux * 4, y: base.y + uy * 4 };
+      const shaft = { x1: plan.tail.x, y1: plan.tail.y, x2: shaftEnd.x, y2: shaftEnd.y, 'stroke-linecap': 'round' };
+      const HALO = 2.5; // outline width, same as around the shaft ((9 - 4) / 2)
+      el('line', { ...shaft, stroke: '#fff', 'stroke-width': 4 + HALO * 2, 'stroke-opacity': 0.9 });
+      el('polygon', { points: head, fill: '#fff', stroke: '#fff', 'stroke-width': HALO * 2, 'stroke-linejoin': 'round', 'fill-opacity': 0.9, 'stroke-opacity': 0.9 });
+      el('line', { ...shaft, stroke: theme.color, 'stroke-width': 4 });
+      el('polygon', { points: head, fill: theme.color, stroke: theme.color, 'stroke-width': 1, 'stroke-linejoin': 'round' });
       decorations.push({ mark: i, box: toRect(lineBox(plan.tail, plan.tip, 8)) });
       if (plan.badge) {
         drawBadge(plan.badge, m.label!);
