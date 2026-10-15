@@ -15,6 +15,9 @@ export interface VocabContext {
   docshot: Docshot;
   target(kind: string, name: string): Locator;
   login(persona: string, password?: string): Promise<void>;
+  /** scroll an element to the center of the viewport (smooth while a video records) */
+  scrollTo(target: Locator): Promise<void>;
+  scrollPage(where: 'top' | 'bottom'): Promise<void>;
 }
 
 export type VocabArgs = Record<string, string | undefined>;
@@ -103,9 +106,32 @@ export const VOCABULARY: VocabEntry[] = [
   },
   {
     key: 'scroll', keyword: 'When', group: 'Navigation',
-    patterns: { de: [re('ich scrolle (?:zu|zur|zum) ', T), re('ich (?:zu|zur|zum) ', T, ' scrolle')], en: [re('I scroll to ', T)] },
-    examples: { de: ['Und ich scrolle zur Überschrift "Mitgliedschaften"'], en: ['And I scroll to the heading "Memberships"'] },
-    run: (ctx, a) => target(ctx, a).scrollIntoViewIfNeeded(),
+    patterns: {
+      de: [
+        re('(?:ich )?scrolle (?:zu|zur|zum|bis zu|bis zur|bis zum) ', T),
+        re('ich (?:zu|zur|zum|bis zu|bis zur|bis zum) ', T, ' scrolle'),
+        re('(?:ich )?(?:scrolle|hole) ', T, ' in den (?:sichtbaren Bereich|Blick)'),
+        re('ich ', T, ' in den (?:sichtbaren Bereich|Blick) (?:scrolle|hole)'),
+      ],
+      en: [re('(?:I )?scroll (?:down |up )?to ', T), re('(?:I )?scroll ', T, ' into view')],
+    },
+    examples: {
+      de: ['Und ich scrolle zum Link "alle Updates"', 'Und scrolle den Link "alle Ereignisse" in den sichtbaren Bereich'],
+      en: ['And I scroll to the link "all updates"', 'And scroll the link "all events" into view'],
+    },
+    run: (ctx, a) => ctx.scrollTo(target(ctx, a)),
+  },
+  {
+    key: 'scrollPage', keyword: 'When', group: 'Navigation',
+    patterns: {
+      de: [
+        re('(?:ich )?scrolle (?:ganz )?(?<where>nach unten|nach oben|ans Seitenende|zum Seitenende|ans Ende der Seite|zum Seitenanfang|an den Anfang der Seite)'),
+        re('ich (?:ganz )?(?<where>nach unten|nach oben|ans Seitenende|zum Seitenende|ans Ende der Seite|zum Seitenanfang|an den Anfang der Seite) scrolle'),
+      ],
+      en: [re('(?:I )?scroll (?:all the way )?(?<where>down|up|to the bottom|to the top)(?: of the page)?')],
+    },
+    examples: { de: ['Und ich scrolle ans Seitenende', 'Und ich scrolle nach oben'], en: ['And I scroll to the bottom of the page'] },
+    run: (ctx, a) => ctx.scrollPage(/oben|anfang|up|top/i.test(a.where ?? '') ? 'top' : 'bottom'),
   },
 
   // ── Eingaben ─────────────────────────────────────────────────────────────

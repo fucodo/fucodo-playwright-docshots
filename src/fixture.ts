@@ -205,6 +205,70 @@ export class Docshot {
     return removed;
   }
 
+  // ── scrolling ─────────────────────────────────────────────────────────────
+
+  /**
+   * Scrolls an element to the center of the viewport – not just to the edge like
+   * scrollIntoViewIfNeeded, so arrows, badges and notes have room. Smooth while a video records.
+   */
+  async scrollIntoView(target: Locator): Promise<void> {
+    await target.first().waitFor({ state: 'attached' });
+    const smooth = Boolean(this.recording);
+    await target.first().evaluate((el, smooth) => el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: smooth ? 'smooth' : 'instant' as ScrollBehavior }), smooth);
+    await this.afterScroll(smooth);
+  }
+
+  async scrollPage(where: 'top' | 'bottom'): Promise<void> {
+    const smooth = Boolean(this.recording);
+    await this.page.evaluate(
+      ({ where, smooth }) => window.scrollTo({ top: where === 'top' ? 0 : document.documentElement.scrollHeight, behavior: smooth ? 'smooth' : ('instant' as ScrollBehavior) }),
+      { where, smooth },
+    );
+    await this.afterScroll(smooth);
+  }
+
+  private async afterScroll(smooth: boolean): Promise<void> {
+    // wait until scrolling came to rest (smooth scrolling, lazy content)
+    await this.page.evaluate(async (smooth) => {
+      let last = -1;
+      for (let i = 0; i < (smooth ? 60 : 10); i++) {
+        await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+        const pos = window.scrollY + window.scrollX * 1e6;
+        if (pos === last && i > 2) break;
+        last = pos;
+        if (smooth) await new Promise((r) => setTimeout(r, 30));
+      }
+    }, smooth);
+  }
+
+  /**
+   * Viewport screenshots: markers outside the visible area would be cut off.
+   * Scroll so that all marked elements are visible (centered), if they fit at all.
+   */
+  private async bringMarksIntoView(): Promise<void> {
+    if (!this.marks.length) return;
+    const rects: Rect[] = [];
+    for (const m of this.marks) {
+      const r = await m.target.first().evaluate(measureInPage).catch(() => undefined);
+      if (r) rects.push(r);
+    }
+    if (!rects.length) return;
+    const vp = await this.page.evaluate(() => ({ x: window.scrollX, y: window.scrollY, w: window.innerWidth, h: window.innerHeight }));
+    const M = 80; // room for badges and arrows
+    const u = union(rects);
+    const visible = u.x - M >= vp.x && u.y - M >= vp.y && u.x + u.width + M <= vp.x + vp.w && u.y + u.height + M <= vp.y + vp.h;
+    if (visible) return;
+    if (this.marks.length === 1) {
+      await this.scrollIntoView(this.marks[0].target); // also works inside scrollable containers
+    } else {
+      await this.page.evaluate(
+        ({ u, vp }) => window.scrollTo({ left: Math.max(0, u.x + u.width / 2 - vp.w / 2), top: Math.max(0, u.y + u.height / 2 - vp.h / 2), behavior: 'instant' as ScrollBehavior }),
+        { u, vp },
+      );
+      await this.afterScroll(false);
+    }
+  }
+
   // ── video ─────────────────────────────────────────────────────────────────
 
   get isRecording(): boolean {
@@ -400,6 +464,7 @@ export class Docshot {
   private async captureInner(options: CaptureOptions, id: string): Promise<ManifestEntry> {
     const { page, opts, testInfo } = this;
     if (options.target) await options.target.scrollIntoViewIfNeeded();
+    else if (!options.fullPage) await this.bringMarksIntoView();
     await this.settle();
 
     const measured: MeasuredMark[] = [];

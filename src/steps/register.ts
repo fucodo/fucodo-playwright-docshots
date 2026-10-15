@@ -53,6 +53,8 @@ export function registerDocshotSteps<T extends TestType<any, any>>(test: T, adap
     page,
     docshot,
     target: (kind, name) => resolveTarget(page, kind, name, adapters.areas),
+    scrollTo: (target) => docshot.scrollIntoView(target),
+    scrollPage: (where) => docshot.scrollPage(where),
     login: async (persona, password) => {
       if (!adapters.login) {
         throw new Error('Kein Login-Adapter konfiguriert: registerDocshotSteps(test, { login: async ({ page, credentials }) => … })');

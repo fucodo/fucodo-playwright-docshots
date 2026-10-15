@@ -81,6 +81,17 @@ http.createServer((req, res) => {
       <label class="check"><input type="checkbox" checked> ${t.active}</label>
       <div class="actions"><button class="ghost" value="cancel">${t.cancel}</button><button class="primary" value="save">${t.save}</button></div></form></dialog>`));
   }
+  if (req.url === '/status') {
+    // long page like status.schullogin.de – the feed links are in the footer
+    const services = Array.from({ length: 50 }, (_, i) => `<tr><td>Dienst ${i + 1}</td><td style="color:#1a7f37">● verfügbar</td></tr>`).join('');
+    return send(page(l, 'Status', `<div class="card"><h1>Dienste-Status</h1><table>${services}</table></div>
+      <footer style="margin:32px 0;color:var(--muted);font-size:14px;display:flex;flex-wrap:wrap;gap:8px 24px">
+        <a href="#" style="color:inherit">Nach oben</a>
+        <span>RSS abonnieren: <a href="/index.xml">alle Updates</a></span>
+        <span>Kalender abonnieren: <a href="/issues.ics">alle Ereignisse</a></span>
+        <span>© Verfügbarkeit digitaler Dienste, 2026</span>
+      </footer>`));
+  }
   if (req.url === '/stress') {
     // deliberately hard layout for the annotation solver: corners, a tight cluster, fields close by
     const btn = (label, style) => `<button class="primary" style="position:absolute;${style}">${label}</button>`;

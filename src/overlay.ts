@@ -114,16 +114,42 @@ export function drawOverlaysInPage(args: {
     x: m.rect.x - PAD - extra, y: m.rect.y - PAD - extra, w: m.rect.width + (PAD + extra) * 2, h: m.rect.height + (PAD + extra) * 2,
   });
 
-  // ── obstacles: visible text & controls (no big containers) ───────────────
-  const viewportArea = window.innerWidth * window.innerHeight;
+  // ── obstacles: the actual text boxes on the page, plus controls and images ──
+  // (per text node, so empty space inside wide cells or containers stays usable)
   const obstacles: Box[] = [];
-  document.querySelectorAll('h1,h2,h3,h4,h5,h6,label,button,a,input,select,textarea,th,td,p,li,img,svg,[role="button"],[role="link"],[role="tab"]').forEach((node) => {
-    if ((node as Element).closest(`[${attr}]`)) return;
+  const reach: Box = { x: view.x - 300, y: view.y - 300, w: view.w + 600, h: view.h + 600 };
+  const near = (b: Box) => b.x < reach.x + reach.w && b.x + b.w > reach.x && b.y < reach.y + reach.h && b.y + b.h > reach.y;
+  const hiddenCache = new Map<Element, boolean>();
+  const isHidden = (el: Element | null): boolean => {
+    if (!el) return false;
+    const cached = hiddenCache.get(el);
+    if (cached !== undefined) return cached;
+    const cs = getComputedStyle(el);
+    const hidden = cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0;
+    hiddenCache.set(el, hidden);
+    return hidden;
+  };
+  const sx = window.scrollX, sy = window.scrollY;
+  const walker = document.createTreeWalker(document.body ?? document.documentElement, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.nodeValue && n.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
+  });
+  const range = document.createRange();
+  for (let node = walker.nextNode(); node && obstacles.length < 5000; node = walker.nextNode()) {
+    const parent = node.parentElement;
+    if (!parent || parent.closest(`[${attr}]`) || parent.closest('script,style,noscript,template') || isHidden(parent)) continue;
+    range.selectNodeContents(node);
+    for (const r of Array.from(range.getClientRects())) {
+      if (r.width < 1 || r.height < 1) continue;
+      const b = { x: r.left + sx, y: r.top + sy, w: r.width, h: r.height };
+      if (near(b)) obstacles.push(b);
+    }
+  }
+  document.querySelectorAll('input,select,textarea,button,img,svg,video,canvas,[role="button"],[role="checkbox"],[role="switch"]').forEach((node) => {
+    if ((node as Element).closest(`[${attr}]`) || isHidden(node as Element)) return;
     const r = (node as Element).getBoundingClientRect();
-    if (r.width < 2 || r.height < 2 || r.width * r.height > viewportArea * 0.25) return;
-    const cs = getComputedStyle(node as Element);
-    if (cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0) return;
-    obstacles.push({ x: r.left + window.scrollX, y: r.top + window.scrollY, w: r.width, h: r.height });
+    if (r.width < 2 || r.height < 2) return;
+    const b = { x: r.left + sx, y: r.top + sy, w: r.width, h: r.height };
+    if (near(b)) obstacles.push(b);
   });
 
   // ── layer + note measuring ────────────────────────────────────────────────

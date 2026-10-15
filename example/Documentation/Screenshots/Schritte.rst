@@ -23,7 +23,10 @@ Navigation
     Wenn ich zu "Personen" navigiere
     Wenn ich auf den Button "Neue Person" klicke
     Und ich klicke auf den Tab "Mitgliedschaften"
-    Und ich scrolle zur Überschrift "Mitgliedschaften"
+    Und ich scrolle zum Link "alle Updates"
+    Und scrolle den Link "alle Ereignisse" in den sichtbaren Bereich
+    Und ich scrolle ans Seitenende
+    Und ich scrolle nach oben
 
 Eingaben
 --------

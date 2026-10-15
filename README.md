@@ -232,6 +232,20 @@ DOCSHOTS_AI_TIMEOUT_MS=180000
 Images and the page's ARIA snapshot are sent to the configured API, so use a self-hosted
 model when screenshots may contain personal data.
 
+## Scrolling
+
+```gherkin
+Und ich scrolle zum Link "alle Updates"
+Und scrolle den Link "alle Ereignisse" in den sichtbaren Bereich
+Und ich scrolle ans Seitenende
+Und ich scrolle nach oben
+```
+
+- The element is scrolled to the **center** of the viewport, not just to its edge, so arrows, numbers and notes have room. Scrollable containers are handled too.
+- While a video records, scrolling is smooth so viewers can follow.
+- **Safety net:** for viewport screenshots, markers outside the visible area are scrolled into view before the capture. If all of them fit, they end up centered together. An explicit scroll step is still clearer for readers of the steps.
+- Elements at the very end of a page (footers) cannot be centered, so they stay at the bottom edge. Annotations then avoid the surrounding text as far as possible.
+
 ## Marking steps
 
 Every marking step takes the same optional suffixes, in this order: a number, then a note.
@@ -249,7 +263,8 @@ Und verdecke das Feld "E-Mail"
 - The note can be written `und Hinweis "…"`, `und dem Hinweis "…"` or `mit dem Hinweis "…"`.
 - English: `with "1"`, `and note "…"`, `and with "2" and the note "…"`.
 
-Annotations are laid out together in the page, right before the capture:
+Annotations are laid out together in the page, right before the capture. "Text" below means
+the real text boxes on the page, measured per text node, so empty space inside wide table cells counts as free:
 
 1. Outlines and their badges are fixed by the marked elements.
 2. Each arrow tries 8 directions × 4 lengths, with its note beyond or beside the badge.
