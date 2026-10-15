@@ -216,6 +216,28 @@ Dann markiere den Link "Impressum" im Selektor "footer .legal"     # dev escape 
 | `im Dialog` | the open dialog |
 | `im/in der <Art> "<Name>"` | inside any target or named area, e.g. `im Dialog "Person anlegen"` |
 
+**Working in one area.** Set the area once instead of repeating the scope in every step:
+
+```gherkin
+Und ich arbeite in der Fußzeile                 # or: im Bereich "Hauptmenü", im Bereich "footer .feeds", im Dialog "Person anlegen"
+Dann zeige mit einem Pfeil auf den Link "Impressum" mit "1"   # searched only inside the footer
+Und markiere den Link "alle Updates" mit "2"
+Und erstelle einen Screenshot                   # crops to the area
+Und ich arbeite wieder auf der ganzen Seite
+```
+
+- Setting the area scrolls it into view.
+- Targets of the following steps are searched inside it. A step with its own scope (`… in der Kopfzeile`) uses that instead.
+- Screenshots and videos without their own target crop to the area, so arrows and notes are laid out around it. `Screenshot der ganzen Seite` stays a full-page shot.
+- `ich öffne die Seite "…"` ends the area, and so does the end of the scenario.
+
+**`Bereich "…"`** is looked up in this order:
+1. a named area from `steps/index.ts`,
+2. a page region (`Fußzeile`, `Kopfzeile`, …),
+3. a CSS selector.
+
+So `Screenshot vom Bereich "Hauptmenü"`, `vom Bereich "Fußzeile"` and `vom Bereich "footer .feeds"` all work. An invalid selector gives an error that lists the named areas.
+
 If a target matches more than once, the error message says so and suggests these forms.
 CSS selectors do not belong in the name: the name is always the visible text or label.
 
@@ -268,6 +290,7 @@ Und ich scrolle nach oben
 - While a video records, scrolling is smooth so viewers can follow.
 - **Safety net:** for viewport screenshots, markers outside the visible area are scrolled into view before the capture. If all of them fit, they end up centered together. An explicit scroll step is still clearer for readers of the steps.
 - Elements at the very end of a page (footers) cannot be centered, so they stay at the bottom edge. Annotations then avoid the surrounding text as far as possible.
+- `ich scrolle an den Anfang der Seite` / `ans Seitenende` scroll the window **and** inner scroll areas (app layouts often scroll a content `<div>`, not the window). They wait until the position is really reached, which matters with CSS `scroll-behavior: smooth` and lazy loading. If it isn't reached within 3 s, there is a warning.
 
 ## Marking steps
 

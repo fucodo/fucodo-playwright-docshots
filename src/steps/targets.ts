@@ -70,6 +70,19 @@ export const ORDINAL_WORDS = Object.keys(ORDINALS);
 
 export class UnknownTargetError extends Error {}
 
+/** Kind words for "a named area or a CSS selector". */
+export const AREA_KINDS = ['bereich', 'area', 'region'];
+
+/** Message for a CSS selector Playwright cannot parse (Bereich "…" / Selektor "…"). */
+export function invalidSelectorMessage(name: string, areas: AreaRegistry): string {
+  const known = Object.keys(areas);
+  return (
+    `"${name}" ist weder ein benannter Bereich noch ein gültiger CSS-Selektor.` +
+    (known.length ? ` Benannte Bereiche: ${known.join(', ')}.` : ' Es sind keine Bereiche benannt (steps/index.ts → areas).') +
+    ` Seitenbereiche: ${LANDMARK_WORDS_DE.join(', ')}.`
+  );
+}
+
 export interface TargetRefinement {
   /** "ersten", "zweiten", "letzten", "second", … */
   nth?: string;
@@ -78,6 +91,8 @@ export interface TargetRefinement {
   scopeName?: string;
   /** search inside a page region: Fußzeile, Kopfbereich, footer, … */
   landmark?: string;
+  /** active area from "ich arbeite in …" – used when the step has no scope of its own */
+  within?: Locator;
 }
 
 /**
@@ -96,6 +111,8 @@ export function resolveTarget(page: Page, kind: string, name: string, areas: Are
     root = lm(page);
   } else if (refine.scopeKind && refine.scopeName !== undefined) {
     root = resolveIn(page, page, refine.scopeKind, refine.scopeName, areas);
+  } else if (refine.within) {
+    root = refine.within;
   }
   let loc = resolveIn(page, root, kind, name, areas);
   if (refine.nth) {
@@ -116,9 +133,13 @@ function resolveIn(page: Page, root: Root, kind: string, name: string, areas: Ar
   if (builtin) return builtin(root, name);
 
   const lowerKind = kind.toLowerCase();
-  if (['bereich', 'area', 'region'].includes(lowerKind)) {
+  if (AREA_KINDS.includes(lowerKind)) {
+    // Bereich "X": 1. named area from steps/index.ts, 2. page region (Fußzeile, …), 3. CSS selector
     const byName = findCaseInsensitive(areas, name);
     if (byName) return inScope(byName);
+    const landmark = LANDMARKS[name.toLowerCase()];
+    if (landmark) return root === page ? landmark(page) : (root as Locator).locator(landmark(page));
+    return asPage(root).locator(name);
   }
 
   const known = [...Object.keys(TARGET_KINDS), ...Object.keys(areas)];
@@ -144,4 +165,4 @@ export function describeTarget(kind: string, name: string, refine: TargetRefinem
 
 /** Hint appended to "not unique" errors. */
 export const AMBIGUOUS_HINT =
-  'Eingrenzen z. B. mit „… in der Fußzeile“, „… im Dialog "Name"“, „… im Bereich "Name"“ oder „den zweiten/letzten …“.';
+  'Eingrenzen z. B. mit „… in der Fußzeile“, „… im Dialog "Name"“, „… im Bereich "Name"“, „den zweiten/letzten …“ – oder vorher „Und ich arbeite in der Fußzeile“.';

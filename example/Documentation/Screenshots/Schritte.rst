@@ -4,7 +4,7 @@
 Verfügbare Screenshot-Schritte
 ==============================
 
-Ziele werden als ``Art "Name"`` angegeben, z. B. ``den Button "Speichern"``, ``das Feld "Vorname"``, ``den Link "Hilfe"``, ``den Tab "…"``, ``die Checkbox "…"``, ``die Auswahl "…"``, ``die Überschrift "…"``, ``den Dialog "…"``, ``die Zeile "…"``, ``den Text "…"`` – oder ein von den Entwicklern benannter Bereich. Gibt es den Text mehrfach, eingrenzen: ``den Link "Impressum" in der Fußzeile``, ``den Button "Speichern" im Dialog "Person anlegen"``, ``den zweiten Link "Impressum"`` (auch Kopfzeile, Navigation, Seitenleiste, Hauptbereich, Dialog).
+Ziele werden als ``Art "Name"`` angegeben, z. B. ``den Button "Speichern"``, ``das Feld "Vorname"``, ``den Link "Hilfe"``, ``den Tab "…"``, ``die Checkbox "…"``, ``die Auswahl "…"``, ``die Überschrift "…"``, ``den Dialog "…"``, ``die Zeile "…"``, ``den Text "…"`` – oder ein von den Entwicklern benannter Bereich. Gibt es den Text mehrfach, eingrenzen: ``den Link "Impressum" in der Fußzeile``, ``den Button "Speichern" im Dialog "Person anlegen"``, ``den zweiten Link "Impressum"`` (auch Kopfzeile, Navigation, Seitenleiste, Hauptbereich, Dialog). Oder einmal festlegen: ``Und ich arbeite in der Fußzeile`` – dann gilt der Bereich für alle folgenden Schritte und der Screenshot wird darauf zugeschnitten. ``Bereich "…"`` kann ein benannter Bereich, ein Seitenbereich oder ein CSS-Selektor sein.
 
 Anmeldung
 ---------
@@ -28,7 +28,11 @@ Navigation
     Und ich scrolle zum Link "alle Updates"
     Und scrolle den Link "alle Ereignisse" in den sichtbaren Bereich
     Und ich scrolle ans Seitenende
-    Und ich scrolle nach oben
+    Und ich scrolle an den Anfang der Seite
+    Und ich arbeite in der Fußzeile
+    Und ich arbeite im Bereich "Hauptmenü"
+    Und ich arbeite im Dialog "Person anlegen"
+    Und ich arbeite wieder auf der ganzen Seite
 
 Eingaben
 --------
@@ -81,6 +85,8 @@ Screenshot
     Und erstelle einen Screenshot der ganzen Seite
     Dann erstelle einen Screenshot
     Dann erstelle einen Screenshot vom Formular "Person anlegen"
+    Dann erstelle einen Screenshot vom Bereich "Hauptmenü"
+    Dann erstelle einen Screenshot vom Bereich "footer .feeds"
     Dann erstelle einen Screenshot "schritt-2" von dem Dialog "Mitgliedschaft hinzufügen"
 
 Video
@@ -102,3 +108,4 @@ Projektspezifische Schritte
 
     Given ich bin in der Personenverwaltung
     When ich den Dialog zum Anlegen einer Person öffne
+    Then die Seite ist ganz {word} gescrollt

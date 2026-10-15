@@ -65,6 +65,8 @@ export function drawOverlaysInPage(args: {
   attr: string;
   mode?: CaptureMode;
   bounds?: Rect;
+  /** crop mode: may the crop grow around annotations? (screenshots yes, videos no – their frame is fixed) */
+  growable?: boolean;
   /** drawn as solid boxes – for videos, where Playwright's screenshot masks do not apply */
   masks?: Rect[];
   maskColor?: string;
@@ -73,6 +75,11 @@ export function drawOverlaysInPage(args: {
   // replace an existing layer in the same task – no frame can show the page without markers
   document.querySelectorAll(`[${attr}]`).forEach((n) => n.remove());
   const mode = args.mode ?? (args.bounds ? 'crop' : 'viewport');
+  // leaving the screenshot area: impossible for viewport shots and videos, cheap for growable element crops
+  // arrows and numbers may stick out a little (the crop grows), notes should stay in the content
+  const growable = mode === 'crop' && args.growable !== false;
+  const OUTSIDE = growable ? 250 : 1e6;
+  const OUTSIDE_NOTE = growable ? 900 : 1e6;
   type P = { x: number; y: number };
   type Box = { x: number; y: number; w: number; h: number };
 
@@ -213,20 +220,63 @@ export function drawOverlaysInPage(args: {
       let score = k * 40;
       if (!inside(c, doc, 0)) score += 1e9;
       // element shots grow their crop around annotations – leaving it only costs a little there
-      else if (!inside(c, view)) score += mode === 'crop' ? 300 : 1e6;
+      else if (!inside(c, view)) score += OUTSIDE;
       markBoxes.forEach((mb, j) => {
         if (j !== i) score += overlap(grow(c, 3), grow(mb, 3)) * 80;
       });
       for (const pb of placedBoxes) score += overlap(grow(c, GAP), pb.box) * 80;
-      for (const o of obstacles) score += overlap(c, o) * 1.5;
+      for (const o of obstacles) score += overlap(c, o) * 5; // a number over letters is hard to read
       if (score < bestScore) { bestScore = score; best = c; }
     });
     badgeOf[i] = best;
     placedBoxes.push({ mark: i, box: best });
   });
 
+  // ── notes of outlines ────────────────────────────────────────────────────
+  const outlineNote: (Box | undefined)[] = marks.map(() => undefined);
+  const NOTE_TAG = -1000; // placedBoxes entries of outline notes use mark index - 1000 … see below
+  const placeOutlineNotes = () => {
+  // remove the previous round's outline notes
+  for (let k = placedBoxes.length - 1; k >= 0; k--) if (placedBoxes[k].mark < 0) placedBoxes.splice(k, 1);
+  marks.forEach((m, i) => {
+    const ns = noteSize[i];
+    if (m.style !== 'outline' || !ns) return;
+    const b = markBoxes[i];
+    const G = 10;
+    const cands: Box[] = [
+      { x: b.x + b.w - ns.w, y: b.y + b.h + G, w: ns.w, h: ns.h },
+      { x: b.x + b.w + G, y: b.y + b.h / 2 - ns.h / 2, w: ns.w, h: ns.h },
+      { x: b.x + b.w - ns.w, y: b.y - G - ns.h, w: ns.w, h: ns.h },
+      { x: b.x, y: b.y + b.h + G, w: ns.w, h: ns.h },
+      { x: b.x - G - ns.w, y: b.y + b.h / 2 - ns.h / 2, w: ns.w, h: ns.h },
+    ];
+    let best = cands[0];
+    let bestScore = Infinity;
+    cands.forEach((c, k) => {
+      let score = k * 50;
+      if (!inside(c, doc, 0)) score += 1e9;
+      else if (!inside(c, view)) score += OUTSIDE_NOTE;
+      for (const o of obstacles) score += overlap(c, o) * 1.5;
+      // own element: avoid covering it; other marked elements (incl. their badges' ring): never
+      markBoxes.forEach((mb, j) => (score += j === i ? overlap(c, mb) * 2 : overlap(c, grow(mb, 16)) * 40));
+      for (const pb of placedBoxes) if (pb.mark !== i && pb.mark !== i + NOTE_TAG) score += overlap(grow(c, GAP), pb.box) * 60;
+      for (const l of placedLines) if (segBox(l.a, l.b, grow(c, 4))) score += 3e4;
+      if (score < bestScore) { bestScore = score; best = c; }
+    });
+    outlineNote[i] = best;
+    placedBoxes.push({ mark: i + NOTE_TAG, box: best });
+  });
+  };
+
+
+  placeOutlineNotes(); // first round: arrows will avoid them
+
   // ── arrows ────────────────────────────────────────────────────────────────
-  const DIRS: P[] = [[-1, -0.6], [1, -0.6], [-1, 0.6], [1, 0.6], [-1, 0], [1, 0], [0, -1], [0, 1]].map(([x, y]) => {
+  // preferred directions first (upper left/right, sideways), then the finer ones
+  const DIRS: P[] = [
+    [-1, -0.6], [1, -0.6], [-1, 0.6], [1, 0.6], [-1, 0], [1, 0], [0, -1], [0, 1],
+    [-1, -0.25], [1, -0.25], [-1, 0.25], [1, 0.25], [-0.45, -1], [0.45, -1], [-0.45, 1], [0.45, 1],
+  ].map(([x, y]) => {
     const l = Math.hypot(x, y);
     return { x: x / l, y: y / l };
   });
@@ -240,10 +290,25 @@ export function drawOverlaysInPage(args: {
     const box = markBoxes[i];
     const c = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
     let best: ArrowPlan | undefined;
-    DIRS.forEach((dir, di) => {
-      // tip: where the ray from the center leaves the padded element, plus a small gap
+    // only text near this arrow matters – keeps 16 directions × anchors × lengths fast
+    // reach: longest arrow + badge + widest note (notes are at most 280 px wide)
+    const reachBox = grow(box, LENGTHS[LENGTHS.length - 1] + (R + 2) * 2 + 300 + 20);
+    const local = obstacles.filter((o) => overlap(o, reachBox) > 0);
+    // anchors: the ray from the center, plus the corners of wide/flat elements (arrows can then
+    // come in from the side of a long link instead of through the line above it)
+    const corners: P[] = [
+      { x: box.x - 4, y: box.y - 4 }, { x: box.x + box.w + 4, y: box.y - 4 },
+      { x: box.x - 4, y: box.y + box.h + 4 }, { x: box.x + box.w + 4, y: box.y + box.h + 4 },
+    ];
+    const anchors = (dir: P): P[] => {
       const t = Math.min(dir.x ? box.w / 2 / Math.abs(dir.x) : Infinity, dir.y ? box.h / 2 / Math.abs(dir.y) : Infinity);
-      const tip = { x: c.x + dir.x * (t + 4), y: c.y + dir.y * (t + 4) };
+      const center = { x: c.x + dir.x * (t + 4), y: c.y + dir.y * (t + 4) };
+      if (!dir.x || !dir.y) return [center];
+      // the corner that faces the direction
+      const corner = corners[(dir.x > 0 ? 1 : 0) + (dir.y > 0 ? 2 : 0)];
+      return [center, corner];
+    };
+    DIRS.forEach((dir, di) => anchors(dir).forEach((tip, ai) => {
       LENGTHS.forEach((len, li) => {
         const tail = { x: tip.x + dir.x * len, y: tip.y + dir.y * len };
         const badgeC = { x: tail.x + dir.x * (R + 2), y: tail.y + dir.y * (R + 2) };
@@ -266,11 +331,11 @@ export function drawOverlaysInPage(args: {
         }
 
         noteCands.forEach((note, ni) => {
-        let score = di * 30 + li * 25 + ni * 20; // prefer upper-left, short, note beyond the badge
-        const parts: Box[] = [lineBox(tail, tip, 2), ...(badge ? [badge] : []), ...(note ? [note] : [])];
-        for (const p of parts) {
+        let score = (di < 8 ? di * 30 : 240 + (di - 8) * 15) + li * 25 + ni * 20 + ai * 40; // prefer upper-left, short, centered
+        const parts: [Box, number][] = [[lineBox(tail, tip, 2), OUTSIDE], ...(badge ? [[badge, OUTSIDE] as [Box, number]] : []), ...(note ? [[note, OUTSIDE_NOTE] as [Box, number]] : [])];
+        for (const [p, cost] of parts) {
           if (!inside(p, doc, 0)) score += 1e9;  // cannot be shown at all
-          else if (!inside(p, view)) score += 1e6; // outside the screenshot area
+          else if (!inside(p, view)) score += cost; // outside the screenshot area
         }
         // collisions with other marks (the own element is avoided by construction)
         markBoxes.forEach((mb, j) => {
@@ -299,16 +364,16 @@ export function drawOverlaysInPage(args: {
         // covering page text: sample the line, area for badge/note
         for (let s = 1; s < 12; s++) {
           const p = { x: tail.x + ((tip.x - tail.x) * s) / 12, y: tail.y + ((tip.y - tail.y) * s) / 12 };
-          if (obstacles.some((o) => ptIn(p, o))) score += 150;
+          if (local.some((o) => ptIn(p, o))) score += 400; // a line through text hides letters
         }
-        for (const o of obstacles) {
-          if (badge) score += overlap(badge, o) * 1.5;
+        for (const o of local) {
+          if (badge) score += overlap(badge, o) * 5;
           if (note) score += overlap(note, o) * 1.5;
         }
         if (!best || score < best.score) best = { tail, tip, dir, badge, note, score };
         });
       });
-    });
+    }));
     return best!;
   };
 
@@ -323,45 +388,42 @@ export function drawOverlaysInPage(args: {
   };
 
   const arrowIdx = marks.map((m, i) => (m.style === 'arrow' ? i : -1)).filter((i) => i >= 0);
-  for (const i of arrowIdx) register(i, (arrowPlan[i] = planArrow(i)));
-  // one refinement pass: each arrow again, with all the others in place
-  for (let pass = 0; pass < 2; pass++) {
-    for (const i of arrowIdx) {
-      unregister(i);
-      arrowPlan[i] = planArrow(i);
-      register(i, arrowPlan[i]!);
-    }
-  }
 
-  // ── notes of outlines ────────────────────────────────────────────────────
-  const outlineNote: (Box | undefined)[] = marks.map(() => undefined);
-  marks.forEach((m, i) => {
-    const ns = noteSize[i];
-    if (m.style !== 'outline' || !ns) return;
-    const b = markBoxes[i];
-    const G = 10;
-    const cands: Box[] = [
-      { x: b.x + b.w - ns.w, y: b.y + b.h + G, w: ns.w, h: ns.h },
-      { x: b.x + b.w + G, y: b.y + b.h / 2 - ns.h / 2, w: ns.w, h: ns.h },
-      { x: b.x + b.w - ns.w, y: b.y - G - ns.h, w: ns.w, h: ns.h },
-      { x: b.x, y: b.y + b.h + G, w: ns.w, h: ns.h },
-      { x: b.x - G - ns.w, y: b.y + b.h / 2 - ns.h / 2, w: ns.w, h: ns.h },
-    ];
-    let best = cands[0];
-    let bestScore = Infinity;
-    cands.forEach((c, k) => {
-      let score = k * 50;
-      if (!inside(c, doc, 0)) score += 1e9;
-      else if (!inside(c, view)) score += 1e6;
-      for (const o of obstacles) score += overlap(c, o);
-      markBoxes.forEach((mb, j) => (score += overlap(c, j === i ? mb : { x: mb.x - 16, y: mb.y - 16, w: mb.w + 32, h: mb.h + 32 }) * 2));
-      for (const pb of placedBoxes) if (pb.mark !== i) score += overlap(grow(c, GAP), pb.box) * 60;
-      for (const l of placedLines) if (segBox(l.a, l.b, grow(c, 4))) score += 3e4;
-      if (score < bestScore) { bestScore = score; best = c; }
-    });
-    outlineNote[i] = best;
-    placedBoxes.push({ mark: i, box: best });
-  });
+  // Greedy placement depends on the order: two arrows can block each other (e.g. cross like an X)
+  // although swapping sides would be free. Try several orders and keep the best total.
+  const solve = (order: number[]): number => {
+    for (const i of arrowIdx) unregister(i);
+    for (const i of order) register(i, (arrowPlan[i] = planArrow(i)));
+    // refinement: each arrow again, with all the others in place
+    for (let pass = 0; pass < 2; pass++) {
+      for (const i of order) {
+        unregister(i);
+        arrowPlan[i] = planArrow(i);
+        register(i, arrowPlan[i]!);
+      }
+    }
+    return order.reduce((sum, i) => sum + arrowPlan[i]!.score, 0);
+  };
+  const permutations = (xs: number[]): number[][] =>
+    xs.length <= 1 ? [xs] : xs.flatMap((x, k) => permutations([...xs.slice(0, k), ...xs.slice(k + 1)]).map((p) => [x, ...p]));
+  const orders =
+    arrowIdx.length <= 4
+      ? permutations(arrowIdx)
+      : [arrowIdx, [...arrowIdx].reverse(), ...arrowIdx.map((_, k) => [...arrowIdx.slice(k), ...arrowIdx.slice(0, k)])];
+  let bestTotal = Infinity;
+  let bestPlans: (ArrowPlan | undefined)[] = [];
+  for (const order of orders) {
+    const total = solve(order);
+    if (total < bestTotal) {
+      bestTotal = total;
+      bestPlans = [...arrowPlan];
+    }
+    if (bestTotal < 1e4) break; // no collisions left – good enough
+  }
+  for (const i of arrowIdx) unregister(i);
+  for (const i of arrowIdx) register(i, (arrowPlan[i] = bestPlans[i]!));
+
+  placeOutlineNotes(); // second round: now that the arrows are fixed
 
   // ── draw ─────────────────────────────────────────────────────────────────
   const svg = document.createElementNS(NS, 'svg');

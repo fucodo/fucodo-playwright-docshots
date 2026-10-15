@@ -123,7 +123,7 @@ function cheatSheet(lang: DocshotLanguage, projectSteps: string[]): string {
     '='.repeat(title.length),
     '',
     lang === 'de'
-      ? 'Ziele werden als ``Art "Name"`` angegeben, z. B. ``den Button "Speichern"``, ``das Feld "Vorname"``, ``den Link "Hilfe"``, ``den Tab "…"``, ``die Checkbox "…"``, ``die Auswahl "…"``, ``die Überschrift "…"``, ``den Dialog "…"``, ``die Zeile "…"``, ``den Text "…"`` – oder ein von den Entwicklern benannter Bereich. Gibt es den Text mehrfach, eingrenzen: ``den Link "Impressum" in der Fußzeile``, ``den Button "Speichern" im Dialog "Person anlegen"``, ``den zweiten Link "Impressum"`` (auch Kopfzeile, Navigation, Seitenleiste, Hauptbereich, Dialog).'
+      ? 'Ziele werden als ``Art "Name"`` angegeben, z. B. ``den Button "Speichern"``, ``das Feld "Vorname"``, ``den Link "Hilfe"``, ``den Tab "…"``, ``die Checkbox "…"``, ``die Auswahl "…"``, ``die Überschrift "…"``, ``den Dialog "…"``, ``die Zeile "…"``, ``den Text "…"`` – oder ein von den Entwicklern benannter Bereich. Gibt es den Text mehrfach, eingrenzen: ``den Link "Impressum" in der Fußzeile``, ``den Button "Speichern" im Dialog "Person anlegen"``, ``den zweiten Link "Impressum"`` (auch Kopfzeile, Navigation, Seitenleiste, Hauptbereich, Dialog). Oder einmal festlegen: ``Und ich arbeite in der Fußzeile`` – dann gilt der Bereich für alle folgenden Schritte und der Screenshot wird darauf zugeschnitten. ``Bereich "…"`` kann ein benannter Bereich, ein Seitenbereich oder ein CSS-Selektor sein.'
       : 'Targets are written as ``kind "name"``, e.g. ``the button "Save"``, ``the field "First name"``, ``the link "Help"`` – or a named area defined by the developers.',
     '',
   ];

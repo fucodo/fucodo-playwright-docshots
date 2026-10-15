@@ -42,3 +42,29 @@ for (const [text, key, expected] of CASES) {
     assert.equal(VOCABULARY.flatMap((e) => e.patterns[lang].filter((p) => p.test(t))).length, 1, 'ambiguous');
   });
 }
+
+const AREA_CASES = [
+  ['Und ich arbeite in der Fußzeile', 'area', { landmark: 'Fußzeile' }],
+  ['Und ich arbeite im Bereich "Hauptmenü"', 'area', { kind: 'Bereich', name: 'Hauptmenü' }],
+  ['Und ich arbeite im Bereich "footer .feeds"', 'area', { kind: 'Bereich', name: 'footer .feeds' }],
+  ['Und ich arbeite nur noch im Dialog "Person anlegen"', 'area', { kind: 'Dialog', name: 'Person anlegen' }],
+  ['Und ich arbeite im Dialog', 'area', { landmark: 'Dialog' }],
+  ['Und ich arbeite wieder auf der ganzen Seite', 'areaReset', {}],
+  ['Und ich scrolle an den Anfang der Seite', 'scrollPage', { where: 'an den Anfang der Seite' }],
+  ['Und ich scrolle zum Anfang der Seite', 'scrollPage', { where: 'zum Anfang der Seite' }],
+  ['Dann erstelle einen Screenshot vom Bereich "footer .feeds"', 'screenshot', { kind: 'Bereich', name: 'footer .feeds' }],
+  ['Dann erstelle einen Screenshot vom Bereich "Fußzeile"', 'screenshot', { kind: 'Bereich', name: 'Fußzeile' }],
+  ['And I work in the footer', 'area', { landmark: 'footer' }],
+  ['And I work on the whole page again', 'areaReset', {}],
+];
+for (const [text, key, expected] of AREA_CASES) {
+  test(`area: ${text}`, () => {
+    const lang = /^(Dann|Und|Wenn)\b/.test(text) ? 'de' : 'en';
+    const m = matchStep(text, lang);
+    assert.ok(m, 'no step matches');
+    assert.equal(m.entry.key, key);
+    for (const [k, v] of Object.entries(expected)) assert.equal(m.args[k], v, k);
+    const t = text.replace(/^\S+\s/, '');
+    assert.equal(VOCABULARY.flatMap((e) => e.patterns[lang].filter((p) => p.test(t))).length, 1, 'ambiguous');
+  });
+}

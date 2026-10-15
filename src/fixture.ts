@@ -133,6 +133,8 @@ export class Docshot {
   private marks: PendingMark[] = [];
   private masks: Locator[] = [];
   private recording: Recording | undefined;
+  /** active area ("Und ich arbeite in der Fußzeile"): targets are searched inside, screenshots/videos crop to it */
+  private area: { locator: Locator; description: string } | undefined;
   /** Layout of the annotations of the last capture (for tests and debugging). */
   lastLayout: OverlayLayout | undefined;
 
@@ -207,6 +209,29 @@ export class Docshot {
     return removed;
   }
 
+  // ── active area ───────────────────────────────────────────────────────────
+
+  get activeArea(): Locator | undefined {
+    return this.area?.locator;
+  }
+
+  get activeAreaDescription(): string | undefined {
+    return this.area?.description;
+  }
+
+  /** "Und ich arbeite in der Fußzeile": following targets are searched inside, screenshots and videos crop to it. */
+  async setArea(locator: Locator, description: string): Promise<void> {
+    const count = await locator.count();
+    if (count === 0) throw new Error(`Bereich nicht gefunden: ${description}`);
+    if (count > 1) throw new Error(`Bereich ist nicht eindeutig (${count} Treffer): ${description}. ${AMBIGUOUS_HINT}`);
+    this.area = { locator, description };
+    await this.scrollIntoView(locator);
+  }
+
+  clearArea(): void {
+    this.area = undefined;
+  }
+
   // ── scrolling ─────────────────────────────────────────────────────────────
 
   /**
@@ -217,28 +242,88 @@ export class Docshot {
     await target.first().waitFor({ state: 'attached' });
     const smooth = Boolean(this.recording);
     await target.first().evaluate((el, smooth) => el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: smooth ? 'smooth' : 'instant' as ScrollBehavior }), smooth);
-    await this.afterScroll(smooth);
+    await this.waitUntilSettled(target, smooth);
   }
 
+  /**
+   * Scrolls to the top or bottom of the page – the window and inner scroll areas
+   * (app layouts often scroll a content <div>, not the window).
+   * Top: every scroll area goes up (like after loading). Bottom: the window and the largest visible scroll area.
+   * Waits until the position is really reached (smooth scrolling, lazy content), max. 3 s (6 s in videos).
+   */
   async scrollPage(where: 'top' | 'bottom'): Promise<void> {
     const smooth = Boolean(this.recording);
-    await this.page.evaluate(
-      ({ where, smooth }) => window.scrollTo({ top: where === 'top' ? 0 : document.documentElement.scrollHeight, behavior: smooth ? 'smooth' : ('instant' as ScrollBehavior) }),
+    const reached = await this.page.evaluate(
+      async ({ where, smooth }) => {
+        const vpArea = window.innerWidth * window.innerHeight;
+        const scrollers = (): Element[] => {
+          const list: Element[] = [];
+          if (document.scrollingElement) list.push(document.scrollingElement);
+          for (const el of Array.from(document.querySelectorAll('body *'))) {
+            if (el.scrollHeight <= el.clientHeight + 1) continue;
+            const cs = getComputedStyle(el);
+            if (!/(auto|scroll|overlay)/.test(cs.overflowY) || cs.visibility === 'hidden' || cs.display === 'none') continue;
+            list.push(el);
+          }
+          return list;
+        };
+        const targets = (): Element[] => {
+          const all = scrollers();
+          if (where === 'top') return all;
+          // bottom: the page itself and the largest visible scroll area (not small lists or sidebars)
+          const inner = all
+            .filter((el) => el !== document.scrollingElement)
+            .map((el) => ({ el, area: el.getBoundingClientRect().width * el.getBoundingClientRect().height }))
+            .filter((x) => x.area >= vpArea * 0.25)
+            .sort((a, b) => b.area - a.area);
+          return [...(document.scrollingElement ? [document.scrollingElement] : []), ...(inner[0] ? [inner[0].el] : [])];
+        };
+        const goal = (el: Element) => (where === 'top' ? 0 : el.scrollHeight - el.clientHeight);
+        const go = () =>
+          targets().forEach((el) => el.scrollTo({ top: goal(el), behavior: smooth ? 'smooth' : ('instant' as ScrollBehavior) }));
+        const done = () => targets().every((el) => Math.abs(el.scrollTop - goal(el)) <= 1);
+
+        go();
+        const until = performance.now() + (smooth ? 6000 : 3000);
+        let lastNudge = performance.now();
+        while (performance.now() < until) {
+          await new Promise((r) => requestAnimationFrame(() => r(undefined)));
+          if (done()) {
+            // stay a moment to be sure (lazy content can extend the page at the bottom)
+            await new Promise((r) => setTimeout(r, 80));
+            if (done()) return true;
+          }
+          // the bottom may move while content loads, smooth scrolling may get interrupted – try again
+          if (performance.now() - lastNudge > (smooth ? 1200 : 300)) {
+            go();
+            lastNudge = performance.now();
+          }
+        }
+        return done();
+      },
       { where, smooth },
     );
-    await this.afterScroll(smooth);
+    if (!reached) {
+      const msg = `Konnte nicht ganz nach ${where === 'top' ? 'oben' : 'unten'} scrollen (Seite lädt nach oder scrollt selbst zurück).`;
+      this.testInfo.annotations.push({ type: 'docshot-scroll', description: msg });
+      console.warn(`⚠ ${this.id} [${this.testInfo.project.name}]: ${msg}`);
+    }
   }
 
-  private async afterScroll(smooth: boolean): Promise<void> {
-    // wait until scrolling came to rest (smooth scrolling, lazy content)
-    await this.page.evaluate(async (smooth) => {
-      let last = -1;
-      for (let i = 0; i < (smooth ? 60 : 10); i++) {
+  /** Waits until the element stopped moving (scrolling done), max. 3 s (6 s in videos). */
+  private async waitUntilSettled(target: Locator, smooth: boolean): Promise<void> {
+    await target.first().evaluate(async (el, smooth) => {
+      let last = '';
+      let still = 0;
+      const until = performance.now() + (smooth ? 6000 : 3000);
+      while (performance.now() < until) {
         await new Promise((r) => requestAnimationFrame(() => r(undefined)));
-        const pos = window.scrollY + window.scrollX * 1e6;
-        if (pos === last && i > 2) break;
-        last = pos;
-        if (smooth) await new Promise((r) => setTimeout(r, 30));
+        const r = el.getBoundingClientRect();
+        const now = `${Math.round(r.top)},${Math.round(r.left)}`;
+        still = now === last ? still + 1 : 0;
+        last = now;
+        // 6 frames without movement – long enough for a delayed start of smooth scrolling
+        if (still >= 6) return;
       }
     }, smooth);
   }
@@ -267,7 +352,11 @@ export class Docshot {
         ({ u, vp }) => window.scrollTo({ left: Math.max(0, u.x + u.width / 2 - vp.w / 2), top: Math.max(0, u.y + u.height / 2 - vp.h / 2), behavior: 'instant' as ScrollBehavior }),
         { u, vp },
       );
-      await this.afterScroll(false);
+      await this.waitUntilSettled(this.marks[0].target, false);
+      // app layouts scroll an inner area, not the window – then bring the first marker into view
+      const first = await this.marks[0].target.first().boundingBox().catch(() => null);
+      const size = this.page.viewportSize();
+      if (first && size && (first.y < 0 || first.y + first.height > size.height)) await this.scrollIntoView(this.marks[0].target);
     }
   }
 
@@ -291,6 +380,7 @@ export class Docshot {
     const video = opts.docshotVideo;
     const id = options.name ? `${this.id}-${slug(options.name)}` : this.id;
     const sc = this.screencast();
+    if (!options.target && this.area) options = { ...options, target: this.area.locator };
 
     let region: Region | undefined;
     if (options.target) {
@@ -428,12 +518,14 @@ export class Docshot {
     await page
       .evaluate(drawOverlaysInPage, {
         marks: measured, theme: opts.docshotTheme, attr: OVERLAY_ATTR,
-        mode: (bounds ? 'crop' : 'viewport') as CaptureMode, bounds, masks, maskColor: opts.docshotMaskColor,
+        mode: (bounds ? 'crop' : 'viewport') as CaptureMode, bounds, growable: false, masks, maskColor: opts.docshotMaskColor,
       })
       .catch(() => undefined);
   }
 
   async capture(options: CaptureOptions = {}): Promise<ManifestEntry> {
+    // no own target: crop to the active area (a full-page shot stays a full-page shot)
+    if (!options.target && !options.fullPage && this.area) options = { ...options, target: this.area.locator };
     const { page, opts, testInfo } = this;
     const id = options.name ? `${this.id}-${slug(options.name)}` : this.id;
 

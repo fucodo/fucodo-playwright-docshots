@@ -81,17 +81,31 @@ http.createServer((req, res) => {
       <label class="check"><input type="checkbox" checked> ${t.active}</label>
       <div class="actions"><button class="ghost" value="cancel">${t.cancel}</button><button class="primary" value="save">${t.save}</button></div></form></dialog>`));
   }
+  if (req.url === '/status-app') {
+    // app-shell layout: the page does not scroll, an inner content area does – and smooth scrolling is on
+    const services = Array.from({ length: 50 }, (_, i) => `<tr><td>Dienst ${i + 1}</td><td style="color:#1a7f37">● verfügbar</td></tr>`).join('');
+    return send(`<!doctype html><html lang="${l}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>Status (App)</title><style>${css}
+        html,body{height:100%;overflow:hidden;scroll-behavior:smooth}
+        .shell{display:flex;flex-direction:column;height:100%}
+        .content{flex:1;overflow:auto;scroll-behavior:smooth}
+      </style></head><body><div class="shell">
+      <header><span class="logo">Status-App</span><nav aria-label="Hauptmenü" style="display:flex;gap:16px"><a href="#">Ereignisse</a><a href="/impressum">Impressum</a></nav></header>
+      <div class="content"><main><div class="card"><h1>Dienste-Status</h1><table>${services}</table></div></main>
+      <footer style="max-width:960px;margin:32px auto;padding:0 16px;color:var(--muted);font-size:14px;display:flex;gap:24px">
+        <span>RSS abonnieren: <a href="/index.xml">alle Updates</a></span><a href="/impressum">Impressum</a>
+      </footer></div></div></body></html>`);
+  }
   if (req.url === '/status') {
     // long page like status.schullogin.de – feed links in the footer, "Impressum" twice (header + footer)
     const services = Array.from({ length: 50 }, (_, i) => `<tr><td>Dienst ${i + 1}</td><td style="color:#1a7f37">● verfügbar</td></tr>`).join('');
     return send(`<!doctype html><html lang="${l}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-      <title>Status</title><style>${css}</style></head><body>
+      <title>Status</title><style>${css} html{scroll-behavior:smooth}</style></head><body>
       <header><span class="logo">Status</span><nav aria-label="Hauptmenü" style="display:flex;gap:16px"><a href="#">Ereignisse</a><a href="/impressum">Impressum</a></nav></header>
       <main><div class="card"><h1>Dienste-Status</h1><table>${services}</table></div></main>
       <footer style="max-width:960px;margin:32px auto;padding:0 16px;color:var(--muted);font-size:14px;display:flex;flex-wrap:wrap;gap:8px 24px">
         <a href="#" style="color:inherit">Nach oben</a>
-        <span>RSS abonnieren: <a href="/index.xml">alle Updates</a></span>
-        <span>Kalender abonnieren: <a href="/issues.ics">alle Ereignisse</a></span>
+        <span class="feeds">RSS abonnieren: <a href="/index.xml">alle Updates</a> · Kalender abonnieren: <a href="/issues.ics">alle Ereignisse</a></span>
         <a href="/impressum">Impressum</a>
         <span>© Verfügbarkeit digitaler Dienste, 2026</span>
       </footer></body></html>`);

@@ -19,6 +19,8 @@ export interface VocabContext {
   /** scroll an element to the center of the viewport (smooth while a video records) */
   scrollTo(target: Locator): Promise<void>;
   scrollPage(where: 'top' | 'bottom'): Promise<void>;
+  /** set (or with undefined: clear) the active area */
+  setArea(spec: { kind?: string; name?: string; landmark?: string } | undefined): Promise<void>;
 }
 
 export type VocabArgs = Record<string, string | undefined>;
@@ -88,7 +90,7 @@ export const VOCABULARY: VocabEntry[] = [
       en: [re('I open (?:the page )?', Q('url')), re('I am on (?:the page )?', Q('url'))],
     },
     examples: { de: ['Wenn ich die Seite "/administration/persons" öffne'], en: ['When I open the page "/administration/persons"'] },
-    run: async (ctx, a) => { await ctx.page.goto(a.url!); },
+    run: async (ctx, a) => { await ctx.setArea(undefined); await ctx.page.goto(a.url!); },
   },
   {
     key: 'navigate', keyword: 'When', group: 'Navigation',
@@ -141,13 +143,41 @@ export const VOCABULARY: VocabEntry[] = [
     key: 'scrollPage', keyword: 'When', group: 'Navigation',
     patterns: {
       de: [
-        re('(?:ich )?scrolle (?:ganz )?(?<where>nach unten|nach oben|ans Seitenende|zum Seitenende|ans Ende der Seite|zum Seitenanfang|an den Anfang der Seite)'),
-        re('ich (?:ganz )?(?<where>nach unten|nach oben|ans Seitenende|zum Seitenende|ans Ende der Seite|zum Seitenanfang|an den Anfang der Seite) scrolle'),
+        re('(?:ich )?scrolle (?:ganz )?(?<where>nach unten|nach oben|ans Seitenende|zum Seitenende|ans Ende der Seite|zum Ende der Seite|zum Seitenanfang|an den Seitenanfang|an den Anfang der Seite|zum Anfang der Seite)'),
+        re('ich (?:ganz )?(?<where>nach unten|nach oben|ans Seitenende|zum Seitenende|ans Ende der Seite|zum Ende der Seite|zum Seitenanfang|an den Seitenanfang|an den Anfang der Seite|zum Anfang der Seite) scrolle'),
       ],
       en: [re('(?:I )?scroll (?:all the way )?(?<where>down|up|to the bottom|to the top)(?: of the page)?')],
     },
-    examples: { de: ['Und ich scrolle ans Seitenende', 'Und ich scrolle nach oben'], en: ['And I scroll to the bottom of the page'] },
+    examples: { de: ['Und ich scrolle ans Seitenende', 'Und ich scrolle an den Anfang der Seite'], en: ['And I scroll to the bottom of the page'] },
     run: (ctx, a) => ctx.scrollPage(/oben|anfang|up|top/i.test(a.where ?? '') ? 'top' : 'bottom'),
+  },
+
+  {
+    key: 'area', keyword: 'Given', group: 'Navigation',
+    patterns: {
+      de: [re(
+        '(?:ich )?arbeite (?:jetzt |ab jetzt |nur |nur noch )?(?:in|im|innerhalb)(?: (?:von|des|der|dem|den|die|das))? ',
+        `(?:(?<landmark>${LANDMARK})(?! ")|(?<kind>[${LETTERS}]+) "(?<name>[^"]*)")`,
+      )],
+      en: [re(
+        '(?:I )?work (?:only )?(?:in|inside|within)(?: the)? ',
+        `(?:(?<landmark>${LANDMARK})(?! ")|(?<kind>[${LETTERS}]+) "(?<name>[^"]*)")`,
+      )],
+    },
+    examples: {
+      de: ['Und ich arbeite in der Fußzeile', 'Und ich arbeite im Bereich "Hauptmenü"', 'Und ich arbeite im Dialog "Person anlegen"'],
+      en: ['And I work in the footer', 'And I work in the area "main menu"'],
+    },
+    run: (ctx, a) => ctx.setArea({ kind: a.kind, name: a.name, landmark: a.landmark }),
+  },
+  {
+    key: 'areaReset', keyword: 'Given', group: 'Navigation',
+    patterns: {
+      de: [re('(?:ich )?arbeite wieder (?:auf|mit) der (?:ganzen|gesamten) Seite')],
+      en: [re('(?:I )?work on the (?:whole|full|entire) page again')],
+    },
+    examples: { de: ['Und ich arbeite wieder auf der ganzen Seite'], en: ['And I work on the whole page again'] },
+    run: (ctx) => ctx.setArea(undefined),
   },
 
   // ── Eingaben ─────────────────────────────────────────────────────────────
@@ -348,7 +378,13 @@ export const VOCABULARY: VocabEntry[] = [
       en: [re('(?:I )?take (?:a )?screenshot(?: ', Q('shot'), ')?(?: of ', T, ')?')],
     },
     examples: {
-      de: ['Dann erstelle einen Screenshot', 'Dann erstelle einen Screenshot vom Formular "Person anlegen"', 'Dann erstelle einen Screenshot "schritt-2" von dem Dialog "Mitgliedschaft hinzufügen"'],
+      de: [
+        'Dann erstelle einen Screenshot',
+        'Dann erstelle einen Screenshot vom Formular "Person anlegen"',
+        'Dann erstelle einen Screenshot vom Bereich "Hauptmenü"',
+        'Dann erstelle einen Screenshot vom Bereich "footer .feeds"',
+        'Dann erstelle einen Screenshot "schritt-2" von dem Dialog "Mitgliedschaft hinzufügen"',
+      ],
       en: ['Then take a screenshot', 'Then take a screenshot of the form "Create person"'],
     },
     run: async (ctx, a) => {

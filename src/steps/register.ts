@@ -5,7 +5,7 @@ import { peer } from '../peer';
 import type { Docshot } from '../fixture';
 import { createCredentialsResolver, type Credentials, type CredentialsResolver, type PersonaRegistry } from '../credentials';
 import type { DocshotLanguage } from '../sources/rst';
-import { AMBIGUOUS_HINT, describeTarget, resolveTarget, type AreaRegistry } from './targets';
+import { AMBIGUOUS_HINT, describeTarget, invalidSelectorMessage, resolveTarget, type AreaRegistry } from './targets';
 import { groupNames, VOCABULARY, type VocabContext } from './vocabulary';
 import { analyze, type AnalyzeJob } from '../ai/analyze';
 
@@ -52,7 +52,19 @@ export function registerDocshotSteps<T extends TestType<any, any>>(test: T, adap
   const contextFor = ({ page, docshot }: FixturesWithDocshot): VocabContext => ({
     page,
     docshot,
-    target: (kind, name, refine) => resolveTarget(page, kind, name, adapters.areas, refine),
+    // an own scope ("… in der Fußzeile") wins, otherwise the active area ("ich arbeite in …") applies
+    target: (kind, name, refine) =>
+      resolveTarget(page, kind, name, adapters.areas, {
+        ...refine,
+        within: refine?.scopeKind || refine?.landmark ? undefined : docshot.activeArea,
+      }),
+    setArea: async (spec) => {
+      if (!spec) return docshot.clearArea();
+      const locator = spec.landmark
+        ? resolveTarget(page, 'Bereich', spec.landmark, adapters.areas)
+        : resolveTarget(page, spec.kind!, spec.name ?? '', adapters.areas);
+      await docshot.setArea(locator, spec.landmark ?? describeTarget(spec.kind!, spec.name ?? ''));
+    },
     scrollTo: (target) => docshot.scrollIntoView(target),
     scrollPage: (where) => docshot.scrollPage(where),
     login: async (persona, password) => {
@@ -79,6 +91,12 @@ export function registerDocshotSteps<T extends TestType<any, any>>(test: T, adap
             await entry.run(contextFor({ page, docshot }), args);
           } catch (e) {
             // Playwright's strict mode: several elements match → explain how to narrow it down
+            // Bereich "…" that is neither a named area nor valid CSS
+            if (e instanceof Error && args.kind && /(Unexpected token|is not a valid selector|Unknown engine|SyntaxError: Failed to execute)/i.test(e.message)) {
+              const isArea = ['bereich', 'area', 'region', 'selektor', 'selector'];
+              const which = isArea.includes(args.kind.toLowerCase()) ? args.name : isArea.includes((args.scopeKind ?? '').toLowerCase()) ? args.scopeName : undefined;
+              if (which !== undefined) throw new Error(`${invalidSelectorMessage(which, adapters.areas ?? {})}\n\n${e.message}`);
+            }
             const m = e instanceof Error && /strict mode violation: .* resolved to (\d+) elements/.exec(e.message);
             if (m) {
               const what = args.kind ? describeTarget(args.kind, args.name ?? '', args) : 'das Ziel';
