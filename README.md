@@ -196,6 +196,29 @@ Write a target as `<Art> "<Name>"`, with an optional article (`den`, `die`, `das
 | anything else, e.g. Formular "X" | `areas['Formular "X"']` |
 | Selektor / selector | raw CSS (dev escape hatch) |
 
+**The same text twice on a page?** Narrow it down. This works in every step (click, fill, mark, arrow, scroll, screenshot, video):
+
+```gherkin
+Dann zeige mit einem Pfeil auf den Link "Impressum" in der Fußzeile mit "7"
+Dann markiere den Button "Speichern" im Dialog "Person anlegen" mit "3"
+Dann markiere den Link "Impressum" im Bereich "Rechtliches"        # named area from steps/index.ts
+Wenn ich auf den zweiten Link "Impressum" klicke                    # ersten … fünften, letzten
+Dann markiere den Link "Impressum" im Selektor "footer .legal"     # dev escape hatch
+```
+
+| Scope | Meaning |
+|---|---|
+| `in der Fußzeile` / `in the footer` | page footer (ARIA `contentinfo`, else the last `<footer>`) |
+| `in der Kopfzeile`, `im Kopfbereich` / `in the header` | page header (`banner`, else `<header>`) |
+| `in der Navigation` | first navigation |
+| `in der Seitenleiste` / `in the sidebar` | `complementary` / `<aside>` |
+| `im Hauptbereich`, `im Inhaltsbereich` | `main` |
+| `im Dialog` | the open dialog |
+| `im/in der <Art> "<Name>"` | inside any target or named area, e.g. `im Dialog "Person anlegen"` |
+
+If a target matches more than once, the error message says so and suggests these forms.
+CSS selectors do not belong in the name: the name is always the visible text or label.
+
 German steps accept both word orders: `ich klicke auf …` and `… wenn ich auf … klicke`.
 `npx docshots steps --out Documentation/Screenshots/Schritte.rst` writes the full
 step list, including your project steps, as an RST page.

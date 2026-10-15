@@ -86,6 +86,7 @@ const DEFAULT_THEME: OverlayTheme = {
 };
 
 import { slug } from './util';
+import { AMBIGUOUS_HINT } from './steps/targets';
 export { slug };
 import { DEFAULT_VIDEO, encodeVideo, withFormat, type Frame, type Region, type VideoOptions } from './video';
 
@@ -192,7 +193,8 @@ export class Docshot {
     const norm = (v: string) => v.replace(/^(den|die|das|dem|der|the) /i, '').toLowerCase();
     this.marks = this.marks.filter((m) => {
       if (filter.label !== undefined) return m.label !== filter.label;
-      if (filter.description !== undefined) return norm(m.description) !== norm(filter.description);
+      // 'Link "X"' also removes a marker that was written as 'zweiten Link "X" in der Fußzeile'
+      if (filter.description !== undefined) return !norm(m.description).includes(norm(filter.description));
       return false;
     });
     const removed = before - this.marks.length;
@@ -471,7 +473,7 @@ export class Docshot {
     for (const mark of this.marks) {
       const count = await mark.target.count();
       if (count === 0) throw new Error(`Markiertes Element nicht gefunden: ${mark.description}`);
-      if (count > 1) throw new Error(`Markierung ist nicht eindeutig (${count} Treffer): ${mark.description}`);
+      if (count > 1) throw new Error(`Markierung ist nicht eindeutig (${count} Treffer): ${mark.description}. ${AMBIGUOUS_HINT}`);
       const rect = await mark.target.evaluate(measureInPage);
       measured.push({ rect, style: mark.style, label: mark.label, note: mark.note });
     }

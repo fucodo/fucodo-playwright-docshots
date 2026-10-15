@@ -108,6 +108,7 @@ function vocabularyHelp(lang: DocshotLanguage, areaNames: string[], projectSteps
     '',
     `Targets are written as <Kind> "<accessible name>" with an optional article. Kinds: ${kinds.join(', ')}.`,
     'For a kind, the name must be the exact accessible name from the ARIA snapshot (button/link text, field label, heading text).',
+    'If the same name exists more than once, narrow it down: append "in der Fußzeile" / "in der Kopfzeile" / "in der Navigation" / "im Dialog" (en: "in the footer" …), or "im Dialog \"X\"", or count: "den zweiten Link \"X\"" / "den letzten …".',
     areaNames.length
       ? `Named areas (use them exactly like this, e.g. "vom Formular \\"X\\"" / "of the form \\"X\\""): ${areaNames.map((a) => (a.includes('"') ? a : `Bereich "${a}"`)).join(', ')}`
       : 'There are no named areas – crop with Dialog "…" or leave the screenshot uncropped.',

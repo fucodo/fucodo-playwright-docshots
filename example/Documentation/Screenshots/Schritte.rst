@@ -4,7 +4,7 @@
 Verfügbare Screenshot-Schritte
 ==============================
 
-Ziele werden als ``Art "Name"`` angegeben, z. B. ``den Button "Speichern"``, ``das Feld "Vorname"``, ``den Link "Hilfe"``, ``den Tab "…"``, ``die Checkbox "…"``, ``die Auswahl "…"``, ``die Überschrift "…"``, ``den Dialog "…"``, ``die Zeile "…"``, ``den Text "…"`` – oder ein von den Entwicklern benannter Bereich.
+Ziele werden als ``Art "Name"`` angegeben, z. B. ``den Button "Speichern"``, ``das Feld "Vorname"``, ``den Link "Hilfe"``, ``den Tab "…"``, ``die Checkbox "…"``, ``die Auswahl "…"``, ``die Überschrift "…"``, ``den Dialog "…"``, ``die Zeile "…"``, ``den Text "…"`` – oder ein von den Entwicklern benannter Bereich. Gibt es den Text mehrfach, eingrenzen: ``den Link "Impressum" in der Fußzeile``, ``den Button "Speichern" im Dialog "Person anlegen"``, ``den zweiten Link "Impressum"`` (auch Kopfzeile, Navigation, Seitenleiste, Hauptbereich, Dialog).
 
 Anmeldung
 ---------
@@ -23,6 +23,8 @@ Navigation
     Wenn ich zu "Personen" navigiere
     Wenn ich auf den Button "Neue Person" klicke
     Und ich klicke auf den Tab "Mitgliedschaften"
+    Wenn ich auf den zweiten Link "Impressum" klicke
+    Und ich klicke auf den Button "Speichern" im Dialog "Person anlegen"
     Und ich scrolle zum Link "alle Updates"
     Und scrolle den Link "alle Ereignisse" in den sichtbaren Bereich
     Und ich scrolle ans Seitenende
@@ -58,9 +60,12 @@ Markieren
     Dann markiere das Feld "Vorname" mit "1"
     Dann markiere das Feld "E-Mail" mit "2" und Hinweis "Pflichtfeld"
     Dann markiere den Link "Hilfe" und dem Hinweis "Öffnet die Anleitung"
+    Dann markiere den letzten Link "Impressum" mit "2"
+    Dann markiere das Feld "E-Mail" im Formular "Person anlegen" mit "1"
     Dann zeige mit einem Pfeil auf den Button "Hilfe"
     Dann zeige mit einem Pfeil auf das Feld "Suche" und mit "2"
     Dann zeige mit einem Pfeil auf den Link "Hilfe" und mit "2" und dem Hinweis "Pflichtfeld"
+    Dann zeige mit einem Pfeil auf den Link "Impressum" in der Fußzeile mit "7"
     Und verdecke das Feld "E-Mail"
     Und blende die Markierungen aus
     Und entferne alle Markierungen

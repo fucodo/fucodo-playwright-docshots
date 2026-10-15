@@ -82,15 +82,19 @@ http.createServer((req, res) => {
       <div class="actions"><button class="ghost" value="cancel">${t.cancel}</button><button class="primary" value="save">${t.save}</button></div></form></dialog>`));
   }
   if (req.url === '/status') {
-    // long page like status.schullogin.de – the feed links are in the footer
+    // long page like status.schullogin.de – feed links in the footer, "Impressum" twice (header + footer)
     const services = Array.from({ length: 50 }, (_, i) => `<tr><td>Dienst ${i + 1}</td><td style="color:#1a7f37">● verfügbar</td></tr>`).join('');
-    return send(page(l, 'Status', `<div class="card"><h1>Dienste-Status</h1><table>${services}</table></div>
-      <footer style="margin:32px 0;color:var(--muted);font-size:14px;display:flex;flex-wrap:wrap;gap:8px 24px">
+    return send(`<!doctype html><html lang="${l}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>Status</title><style>${css}</style></head><body>
+      <header><span class="logo">Status</span><nav aria-label="Hauptmenü" style="display:flex;gap:16px"><a href="#">Ereignisse</a><a href="/impressum">Impressum</a></nav></header>
+      <main><div class="card"><h1>Dienste-Status</h1><table>${services}</table></div></main>
+      <footer style="max-width:960px;margin:32px auto;padding:0 16px;color:var(--muted);font-size:14px;display:flex;flex-wrap:wrap;gap:8px 24px">
         <a href="#" style="color:inherit">Nach oben</a>
         <span>RSS abonnieren: <a href="/index.xml">alle Updates</a></span>
         <span>Kalender abonnieren: <a href="/issues.ics">alle Ereignisse</a></span>
+        <a href="/impressum">Impressum</a>
         <span>© Verfügbarkeit digitaler Dienste, 2026</span>
-      </footer>`));
+      </footer></body></html>`);
   }
   if (req.url === '/stress') {
     // deliberately hard layout for the annotation solver: corners, a tight cluster, fields close by

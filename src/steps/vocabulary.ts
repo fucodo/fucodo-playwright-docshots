@@ -1,6 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import type { Docshot } from '../fixture';
 import type { DocshotLanguage } from '../sources/rst';
+import { describeTarget, LANDMARK_WORDS_DE, LANDMARK_WORDS_EN, ORDINAL_WORDS, type TargetRefinement } from './targets';
 
 /**
  * The built-in step vocabulary.
@@ -13,7 +14,7 @@ import type { DocshotLanguage } from '../sources/rst';
 export interface VocabContext {
   page: Page;
   docshot: Docshot;
-  target(kind: string, name: string): Locator;
+  target(kind: string, name: string, refine?: TargetRefinement): Locator;
   login(persona: string, password?: string): Promise<void>;
   /** scroll an element to the center of the viewport (smooth while a video records) */
   scrollTo(target: Locator): Promise<void>;
@@ -33,7 +34,17 @@ export interface VocabEntry {
 
 const LETTERS = 'A-Za-zÄÖÜäöüß';
 const ART = '(?:(?:den|die|das|dem|der|einen|eine|ein|the|a|an) )?';
-const T = `${ART}(?<kind>[${LETTERS}]+) "(?<name>[^"]*)"`;
+// Target: [article] [ordinal] <Kind> "<name>" [in <scope>]
+//   den Link "Impressum"
+//   den zweiten Link "Impressum"            → n-th match (ersten … fünften, letzten / first … last)
+//   den Link "Impressum" in der Fußzeile    → inside a page region (landmark)
+//   den Button "Speichern" im Dialog "X"    → inside another target or named area
+const ORDINAL = `(?:(?<nth>${[...ORDINAL_WORDS].sort((a, b) => b.length - a.length).join('|')}) )?`;
+const LANDMARK = [...LANDMARK_WORDS_DE, ...LANDMARK_WORDS_EN].sort((a, b) => b.length - a.length).join('|');
+const SCOPE =
+  `(?: (?:in|im|innerhalb|inside|within)(?: (?:von|of))?(?: (?:der|dem|des|den|die|das|the))? ` +
+  `(?:(?<landmark>${LANDMARK})(?! ")|(?<scopeKind>[${LETTERS}]+) "(?<scopeName>[^"]*)"))?`;
+const T = `${ART}${ORDINAL}(?<kind>[${LETTERS}]+) "(?<name>[^"]*)"${SCOPE}`;
 const Q = (name: string) => `"(?<${name}>[^"]*)"`;
 // One shared suffix for every marking step (markiere / zeige mit einem Pfeil / …):
 //   … mit "1"   … und mit "1"   … und Hinweis "x"   … und dem Hinweis "x"   … mit dem Hinweis "x"
@@ -42,7 +53,9 @@ const LABEL_NOTE_DE = `(?: (?:und )?mit (?:der Nummer )?${Q('label')})?(?: (?:un
 const LABEL_NOTE_EN = `(?: (?:and )?with (?:label |number )?${Q('label')})?(?: (?:and|with) (?:a |the )?note ${Q('note')})?`;
 const re = (...parts: string[]) => new RegExp(`^${parts.join('')}$`);
 
-const target = (ctx: VocabContext, a: VocabArgs) => ctx.target(a.kind!, a.name!);
+const refinement = (a: VocabArgs): TargetRefinement => ({ nth: a.nth, scopeKind: a.scopeKind, scopeName: a.scopeName, landmark: a.landmark });
+const target = (ctx: VocabContext, a: VocabArgs) => ctx.target(a.kind!, a.name!, refinement(a));
+const describe = (a: VocabArgs) => describeTarget(a.kind!, a.name!, refinement(a));
 const opt = (v: string | undefined) => (v === undefined || v === null || v === '' ? undefined : v);
 
 export const VOCABULARY: VocabEntry[] = [
@@ -101,7 +114,10 @@ export const VOCABULARY: VocabEntry[] = [
       de: [re('ich klicke auf ', T), re('ich auf ', T, ' klicke')],
       en: [re('I click (?:on )?', T)],
     },
-    examples: { de: ['Wenn ich auf den Button "Neue Person" klicke', 'Und ich klicke auf den Tab "Mitgliedschaften"'], en: ['When I click the button "New person"'] },
+    examples: {
+      de: ['Wenn ich auf den Button "Neue Person" klicke', 'Und ich klicke auf den Tab "Mitgliedschaften"', 'Wenn ich auf den zweiten Link "Impressum" klicke', 'Und ich klicke auf den Button "Speichern" im Dialog "Person anlegen"'],
+      en: ['When I click the button "New person"', 'When I click the link "Imprint" in the footer'],
+    },
     run: (ctx, a) => target(ctx, a).click(),
   },
   {
@@ -236,6 +252,8 @@ export const VOCABULARY: VocabEntry[] = [
         'Dann markiere das Feld "Vorname" mit "1"',
         'Dann markiere das Feld "E-Mail" mit "2" und Hinweis "Pflichtfeld"',
         'Dann markiere den Link "Hilfe" und dem Hinweis "Öffnet die Anleitung"',
+        'Dann markiere den letzten Link "Impressum" mit "2"',
+        'Dann markiere das Feld "E-Mail" im Formular "Person anlegen" mit "1"',
       ],
       en: [
         'Then highlight the button "Save"',
@@ -244,7 +262,7 @@ export const VOCABULARY: VocabEntry[] = [
       ],
     },
     run: async (ctx, a) => {
-      ctx.docshot.highlight(target(ctx, a), { label: opt(a.label), note: opt(a.note), description: `${a.kind} "${a.name}"` });
+      ctx.docshot.highlight(target(ctx, a), { label: opt(a.label), note: opt(a.note), description: describe(a) });
     },
   },
   {
@@ -258,6 +276,7 @@ export const VOCABULARY: VocabEntry[] = [
         'Dann zeige mit einem Pfeil auf den Button "Hilfe"',
         'Dann zeige mit einem Pfeil auf das Feld "Suche" und mit "2"',
         'Dann zeige mit einem Pfeil auf den Link "Hilfe" und mit "2" und dem Hinweis "Pflichtfeld"',
+        'Dann zeige mit einem Pfeil auf den Link "Impressum" in der Fußzeile mit "7"',
       ],
       en: [
         'Then point at the button "Help"',
@@ -265,7 +284,7 @@ export const VOCABULARY: VocabEntry[] = [
       ],
     },
     run: async (ctx, a) => {
-      ctx.docshot.pointAt(target(ctx, a), { label: opt(a.label), note: opt(a.note), description: `${a.kind} "${a.name}"` });
+      ctx.docshot.pointAt(target(ctx, a), { label: opt(a.label), note: opt(a.note), description: describe(a) });
     },
   },
   {
@@ -309,7 +328,7 @@ export const VOCABULARY: VocabEntry[] = [
       en: [re('(?:I )?(?:hide|remove) (?:the )?marker (?:of|on|from) ', T)],
     },
     examples: { de: ['Und entferne die Markierung vom Feld "Vorname"'], en: ['And remove the marker of the field "First name"'] },
-    run: async (ctx, a) => { await ctx.docshot.hideMarks({ description: `${a.kind} "${a.name}"` }); },
+    run: async (ctx, a) => { await ctx.docshot.hideMarks({ description: describe(a) }); },
   },
 
   // ── Screenshot ───────────────────────────────────────────────────────────

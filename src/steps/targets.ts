@@ -3,9 +3,13 @@ import type { Locator, Page } from '@playwright/test';
 /** Named areas provided by devs, e.g. 'Formular "Benutzer anlegen"' or just 'Seitenleiste'. */
 export type AreaRegistry = Record<string, (page: Page) => Locator>;
 
-type Resolver = (page: Page, name: string) => Locator;
+/** Where to search: the whole page or inside another element (scope). */
+type Root = Page | Locator;
+type Resolver = (root: Root, name: string) => Locator;
 
-const role = (r: Parameters<Page['getByRole']>[0]): Resolver => (page, name) => page.getByRole(r, { name, exact: true });
+// Page and Locator share getByRole/getByLabel/getByText/locator – one cast keeps the overloads simple
+const asPage = (root: Root) => root as Page;
+const role = (r: Parameters<Page['getByRole']>[0]): Resolver => (root, name) => asPage(root).getByRole(r, { name, exact: true });
 
 /**
  * Kind words support staff can use, in German and English.
@@ -21,37 +25,100 @@ export const TARGET_KINDS: Record<string, Resolver> = {
   auswahl: role('combobox'), auswahlfeld: role('combobox'), dropdown: role('combobox'), select: role('combobox'),
   überschrift: role('heading'), heading: role('heading'),
   dialog: role('dialog'),
-  zeile: (page, name) => page.getByRole('row').filter({ hasText: name }),
-  row: (page, name) => page.getByRole('row').filter({ hasText: name }),
-  feld: (page, name) => page.getByLabel(name, { exact: true }),
-  eingabefeld: (page, name) => page.getByLabel(name, { exact: true }),
-  field: (page, name) => page.getByLabel(name, { exact: true }),
-  text: (page, name) => page.getByText(name, { exact: true }),
+  liste: role('list'), list: role('list'),
+  tabelle: role('table'), table: role('table'),
+  zeile: (root, name) => asPage(root).getByRole('row').filter({ hasText: name }),
+  row: (root, name) => asPage(root).getByRole('row').filter({ hasText: name }),
+  feld: (root, name) => asPage(root).getByLabel(name, { exact: true }),
+  eingabefeld: (root, name) => asPage(root).getByLabel(name, { exact: true }),
+  field: (root, name) => asPage(root).getByLabel(name, { exact: true }),
+  text: (root, name) => asPage(root).getByText(name, { exact: true }),
   // escape hatch for devs – support staff should ask for a named area instead
-  selektor: (page, css) => page.locator(css),
-  selector: (page, css) => page.locator(css),
+  selektor: (root, css) => asPage(root).locator(css),
+  selector: (root, css) => asPage(root).locator(css),
 };
 
+/**
+ * Page regions without a name: "in der Fußzeile", "im Kopfbereich", "in the footer".
+ * ARIA landmark first, the HTML element as fallback (e.g. a <footer> inside <main> has no landmark role).
+ */
+const LANDMARKS: Record<string, (page: Page) => Locator> = {
+  fußzeile: (p) => p.getByRole('contentinfo').or(p.locator('footer')).last(),
+  footer: (p) => p.getByRole('contentinfo').or(p.locator('footer')).last(),
+  kopfzeile: (p) => p.getByRole('banner').or(p.locator('header')).first(),
+  kopfbereich: (p) => p.getByRole('banner').or(p.locator('header')).first(),
+  header: (p) => p.getByRole('banner').or(p.locator('header')).first(),
+  navigation: (p) => p.getByRole('navigation').first(),
+  seitenleiste: (p) => p.getByRole('complementary').or(p.locator('aside')).first(),
+  sidebar: (p) => p.getByRole('complementary').or(p.locator('aside')).first(),
+  hauptbereich: (p) => p.getByRole('main').or(p.locator('main')).first(),
+  inhaltsbereich: (p) => p.getByRole('main').or(p.locator('main')).first(),
+  'main content': (p) => p.getByRole('main').or(p.locator('main')).first(),
+  'main area': (p) => p.getByRole('main').or(p.locator('main')).first(),
+  dialog: (p) => p.getByRole('dialog').last(),
+};
+
+export const LANDMARK_WORDS_DE = ['Fußzeile', 'Kopfzeile', 'Kopfbereich', 'Navigation', 'Seitenleiste', 'Hauptbereich', 'Inhaltsbereich', 'Dialog'];
+export const LANDMARK_WORDS_EN = ['footer', 'header', 'navigation', 'sidebar', 'main content', 'main area', 'dialog'];
+
+const ORDINALS: Record<string, number> = {
+  ersten: 0, erste: 0, zweiten: 1, zweite: 1, dritten: 2, dritte: 2, vierten: 3, vierte: 3, fünften: 4, fünfte: 4,
+  first: 0, second: 1, third: 2, fourth: 3, fifth: 4,
+  letzten: -1, letzte: -1, last: -1,
+};
+export const ORDINAL_WORDS = Object.keys(ORDINALS);
+
 export class UnknownTargetError extends Error {}
+
+export interface TargetRefinement {
+  /** "ersten", "zweiten", "letzten", "second", … */
+  nth?: string;
+  /** search inside another target: <scopeKind> "<scopeName>" */
+  scopeKind?: string;
+  scopeName?: string;
+  /** search inside a page region: Fußzeile, Kopfbereich, footer, … */
+  landmark?: string;
+}
 
 /**
  * Resolves `<kind> "<name>"`:
  *   1. area registry with the full phrase:  'Formular "Benutzer anlegen"'
  *   2. built-in kind words:                 Button, Feld, Link, …
  *   3. area registry with the kind as name: 'Bereich "Seitenleiste"' → areas['Seitenleiste']
+ *
+ * Optionally inside a scope ("im Dialog "X"", "in der Fußzeile") and/or the n-th match ("den zweiten Link …").
  */
-export function resolveTarget(page: Page, kind: string, name: string, areas: AreaRegistry = {}): Locator {
+export function resolveTarget(page: Page, kind: string, name: string, areas: AreaRegistry = {}, refine: TargetRefinement = {}): Locator {
+  let root: Root = page;
+  if (refine.landmark) {
+    const lm = LANDMARKS[refine.landmark.toLowerCase()];
+    if (!lm) throw new UnknownTargetError(`Unbekannter Seitenbereich "${refine.landmark}". Möglich: ${LANDMARK_WORDS_DE.join(', ')}`);
+    root = lm(page);
+  } else if (refine.scopeKind && refine.scopeName !== undefined) {
+    root = resolveIn(page, page, refine.scopeKind, refine.scopeName, areas);
+  }
+  let loc = resolveIn(page, root, kind, name, areas);
+  if (refine.nth) {
+    const n = ORDINALS[refine.nth.toLowerCase()];
+    if (n === undefined) throw new UnknownTargetError(`Unbekannte Zählung "${refine.nth}" – möglich: ersten, zweiten, dritten, letzten`);
+    loc = n < 0 ? loc.last() : loc.nth(n);
+  }
+  return loc;
+}
+
+function resolveIn(page: Page, root: Root, kind: string, name: string, areas: AreaRegistry): Locator {
+  const inScope = (area: (page: Page) => Locator) => (root === page ? area(page) : (root as Locator).locator(area(page)));
   const phrase = `${kind} "${name}"`;
   const byPhrase = findCaseInsensitive(areas, phrase);
-  if (byPhrase) return byPhrase(page);
+  if (byPhrase) return inScope(byPhrase);
 
   const builtin = TARGET_KINDS[kind.toLowerCase()];
-  if (builtin) return builtin(page, name);
+  if (builtin) return builtin(root, name);
 
   const lowerKind = kind.toLowerCase();
   if (['bereich', 'area', 'region'].includes(lowerKind)) {
     const byName = findCaseInsensitive(areas, name);
-    if (byName) return byName(page);
+    if (byName) return inScope(byName);
   }
 
   const known = [...Object.keys(TARGET_KINDS), ...Object.keys(areas)];
@@ -67,4 +134,14 @@ function findCaseInsensitive<T>(record: Record<string, T>, key: string): T | und
   return hit ? record[hit] : undefined;
 }
 
-export const describeTarget = (kind: string, name: string) => `${kind} "${name}"`;
+/** Human-readable target incl. refinement, for messages: 'zweiten Link "Impressum" in der Fußzeile' */
+export function describeTarget(kind: string, name: string, refine: TargetRefinement = {}): string {
+  const base = `${refine.nth ? `${refine.nth} ` : ''}${kind} "${name}"`;
+  if (refine.landmark) return `${base} in ${refine.landmark}`;
+  if (refine.scopeKind) return `${base} in ${refine.scopeKind} "${refine.scopeName}"`;
+  return base;
+}
+
+/** Hint appended to "not unique" errors. */
+export const AMBIGUOUS_HINT =
+  'Eingrenzen z. B. mit „… in der Fußzeile“, „… im Dialog "Name"“, „… im Bereich "Name"“ oder „den zweiten/letzten …“.';

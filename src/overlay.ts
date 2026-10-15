@@ -130,7 +130,16 @@ export function drawOverlaysInPage(args: {
     return hidden;
   };
   const sx = window.scrollX, sy = window.scrollY;
-  const walker = document.createTreeWalker(document.body ?? document.documentElement, NodeFilter.SHOW_TEXT, {
+  // with a modal dialog open, the page behind it is inert and dimmed – only the dialog's text counts
+  let modal: Element | null = null;
+  try {
+    const open = Array.from(document.querySelectorAll('dialog:modal'));
+    modal = open.length ? open[open.length - 1] : null;
+  } catch {
+    /* :modal not supported */
+  }
+  const textRoot: Node = modal ?? document.body ?? document.documentElement;
+  const walker = document.createTreeWalker(textRoot, NodeFilter.SHOW_TEXT, {
     acceptNode: (n) => (n.nodeValue && n.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT),
   });
   const range = document.createRange();
@@ -144,7 +153,7 @@ export function drawOverlaysInPage(args: {
       if (near(b)) obstacles.push(b);
     }
   }
-  document.querySelectorAll('input,select,textarea,button,img,svg,video,canvas,[role="button"],[role="checkbox"],[role="switch"]').forEach((node) => {
+  (modal ?? document).querySelectorAll('input,select,textarea,button,img,svg,video,canvas,[role="button"],[role="checkbox"],[role="switch"]').forEach((node) => {
     if ((node as Element).closest(`[${attr}]`) || isHidden(node as Element)) return;
     const r = (node as Element).getBoundingClientRect();
     if (r.width < 2 || r.height < 2) return;
@@ -179,17 +188,41 @@ export function drawOverlaysInPage(args: {
   const placedBoxes: { mark: number; box: Box }[] = []; // badges and notes
   const placedLines: { mark: number; a: P; b: P }[] = [];
   const markBoxes = marks.map((m) => padded(m));
+  const GAP = 10; // minimum distance between badges/notes of different marks
 
-  // outline badges are fixed by their element (left-center for wide fields, corner otherwise)
+  // outline badges: several positions around their element; pick the one that is inside the view and
+  // does not sit on other marked elements, other badges or text (left-center first for wide fields)
   const badgeOf: (Box | undefined)[] = marks.map(() => undefined);
   marks.forEach((m, i) => {
     if (m.style !== 'outline' || !m.label) return;
     const b = markBoxes[i];
-    const roomLeft = m.rect.width >= 240 && b.x - (R + 6) * 2 > view.x;
-    const cx = roomLeft ? b.x - R - 6 : b.x;
-    const cy = roomLeft ? b.y + b.h / 2 : b.y - (R + 4) < view.y ? b.y + b.h : b.y;
-    badgeOf[i] = { x: cx - R - 2, y: cy - R - 2, w: (R + 2) * 2, h: (R + 2) * 2 };
-    placedBoxes.push({ mark: i, box: badgeOf[i]! });
+    const S = (R + 2) * 2;
+    const at = (cx: number, cy: number): Box => ({ x: cx - S / 2, y: cy - S / 2, w: S, h: S });
+    const cands: Box[] = [
+      ...(m.rect.width >= 240 ? [at(b.x - R - 6, b.y + b.h / 2)] : []), // left of wide fields
+      at(b.x, b.y),                 // top-left corner
+      at(b.x, b.y + b.h),           // bottom-left
+      at(b.x + b.w, b.y),           // top-right
+      at(b.x + b.w, b.y + b.h),     // bottom-right
+      at(b.x - R - 6, b.y + b.h / 2), // left
+      at(b.x + b.w + R + 6, b.y + b.h / 2), // right
+    ];
+    let best = cands[0];
+    let bestScore = Infinity;
+    cands.forEach((c, k) => {
+      let score = k * 40;
+      if (!inside(c, doc, 0)) score += 1e9;
+      // element shots grow their crop around annotations – leaving it only costs a little there
+      else if (!inside(c, view)) score += mode === 'crop' ? 300 : 1e6;
+      markBoxes.forEach((mb, j) => {
+        if (j !== i) score += overlap(grow(c, 3), grow(mb, 3)) * 80;
+      });
+      for (const pb of placedBoxes) score += overlap(grow(c, GAP), pb.box) * 80;
+      for (const o of obstacles) score += overlap(c, o) * 1.5;
+      if (score < bestScore) { bestScore = score; best = c; }
+    });
+    badgeOf[i] = best;
+    placedBoxes.push({ mark: i, box: best });
   });
 
   // ── arrows ────────────────────────────────────────────────────────────────
@@ -198,7 +231,6 @@ export function drawOverlaysInPage(args: {
     return { x: x / l, y: y / l };
   });
   const LENGTHS = [80, 115, 155, 200];
-  const GAP = 10; // minimum distance between badges/notes of different marks
 
   type ArrowPlan = { tail: P; tip: P; dir: P; badge?: Box; note?: Box; score: number };
   const arrowPlan: (ArrowPlan | undefined)[] = marks.map(() => undefined);
@@ -493,6 +525,10 @@ export function layoutProblems(layout: OverlayLayout, marks: { rect: Rect }[]): 
       if (j !== a.mark && segBox(a.tail, a.tip, m.rect)) out.add(`Pfeil von ${n(a.mark)} läuft über das markierte Element ${n(j)}`);
     });
   }
+  for (const b of boxes)
+    marks.forEach((m, j) => {
+      if (j !== b.mark && ov(b.box, m.rect)) out.add(`Nummer/Hinweis von ${n(b.mark)} liegt auf dem markierten Element ${n(j)}`);
+    });
   for (let i = 0; i < boxes.length; i++)
     for (let j = i + 1; j < boxes.length; j++)
       if (boxes[i].mark !== boxes[j].mark && ov(boxes[i].box, boxes[j].box)) out.add(`Nummern/Hinweise von ${n(boxes[i].mark)} und ${n(boxes[j].mark)} überlappen`);

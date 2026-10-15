@@ -5,7 +5,7 @@ import { peer } from '../peer';
 import type { Docshot } from '../fixture';
 import { createCredentialsResolver, type Credentials, type CredentialsResolver, type PersonaRegistry } from '../credentials';
 import type { DocshotLanguage } from '../sources/rst';
-import { resolveTarget, type AreaRegistry } from './targets';
+import { AMBIGUOUS_HINT, describeTarget, resolveTarget, type AreaRegistry } from './targets';
 import { groupNames, VOCABULARY, type VocabContext } from './vocabulary';
 import { analyze, type AnalyzeJob } from '../ai/analyze';
 
@@ -52,7 +52,7 @@ export function registerDocshotSteps<T extends TestType<any, any>>(test: T, adap
   const contextFor = ({ page, docshot }: FixturesWithDocshot): VocabContext => ({
     page,
     docshot,
-    target: (kind, name) => resolveTarget(page, kind, name, adapters.areas),
+    target: (kind, name, refine) => resolveTarget(page, kind, name, adapters.areas, refine),
     scrollTo: (target) => docshot.scrollIntoView(target),
     scrollPage: (where) => docshot.scrollPage(where),
     login: async (persona, password) => {
@@ -75,7 +75,17 @@ export function registerDocshotSteps<T extends TestType<any, any>>(test: T, adap
         const fn = async ({ page, docshot }: FixturesWithDocshot, ...values: (string | null | undefined)[]) => {
           const args: Record<string, string | undefined> = {};
           names.forEach((n, i) => (args[n] = values[i] ?? undefined));
-          await entry.run(contextFor({ page, docshot }), args);
+          try {
+            await entry.run(contextFor({ page, docshot }), args);
+          } catch (e) {
+            // Playwright's strict mode: several elements match → explain how to narrow it down
+            const m = e instanceof Error && /strict mode violation: .* resolved to (\d+) elements/.exec(e.message);
+            if (m) {
+              const what = args.kind ? describeTarget(args.kind, args.name ?? '', args) : 'das Ziel';
+              throw new Error(`${what} ist nicht eindeutig (${m[1]} Treffer). ${AMBIGUOUS_HINT}\n\n${(e as Error).message}`);
+            }
+            throw e;
+          }
           // while a video records: keep live markers on their elements and give viewers time
           await docshot.afterStep(STEP_KIND[entry.group] ?? 'other');
         };

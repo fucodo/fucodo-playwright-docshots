@@ -22,7 +22,7 @@ test('both German word orders give the same arguments', () => {
   const args = (text) => {
     const p = click.patterns.de.find((r) => r.test(text));
     const m = p.exec(text);
-    return Object.fromEntries(groupNames(p).map((n) => [n, m.groups[n]]));
+    return Object.fromEntries(groupNames(p).map((n) => [n, m.groups[n]]).filter(([, v]) => v !== undefined));
   };
   assert.deepEqual(args('ich klicke auf den Button "Speichern"'), { kind: 'Button', name: 'Speichern' });
   assert.deepEqual(args('ich auf den Button "Speichern" klicke'), { kind: 'Button', name: 'Speichern' });
