@@ -282,10 +282,15 @@ export function drawOverlaysInPage(args: {
   });
   const LENGTHS = [80, 115, 155, 200];
 
-  type ArrowPlan = { tail: P; tip: P; dir: P; badge?: Box; note?: Box; score: number };
+  // hard: real conflicts (crossing, overlapping, outside the picture) – soft: text covered, preferences
+  type ArrowPlan = { tail: P; tip: P; dir: P; di: number; li: number; badge?: Box; note?: Box; score: number; hard: number };
   const arrowPlan: (ArrowPlan | undefined)[] = marks.map(() => undefined);
 
-  const planArrow = (i: number): ArrowPlan => {
+  /**
+   * Best position for one arrow. `only` restricts direction and length (used to try a uniform
+   * look for all arrows); without it, deviating from the other arrows' direction/length costs a little.
+   */
+  const planArrow = (i: number, only?: { di: number; li: number }): ArrowPlan => {
     const m = marks[i];
     const box = markBoxes[i];
     const c = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
@@ -308,8 +313,12 @@ export function drawOverlaysInPage(args: {
       const corner = corners[(dir.x > 0 ? 1 : 0) + (dir.y > 0 ? 2 : 0)];
       return [center, corner];
     };
-    DIRS.forEach((dir, di) => anchors(dir).forEach((tip, ai) => {
+    const others = arrowPlan.filter((p, j): p is ArrowPlan => !!p && j !== i && marks[j].style === 'arrow');
+    DIRS.forEach((dir, di) => {
+      if (only && di !== only.di) return;
+      anchors(dir).forEach((tip, ai) => {
       LENGTHS.forEach((len, li) => {
+        if (only && li !== only.li) return;
         const tail = { x: tip.x + dir.x * len, y: tip.y + dir.y * len };
         const badgeC = { x: tail.x + dir.x * (R + 2), y: tail.y + dir.y * (R + 2) };
         const badge = m.label ? { x: badgeC.x - R - 2, y: badgeC.y - R - 2, w: (R + 2) * 2, h: (R + 2) * 2 } : undefined;
@@ -331,49 +340,66 @@ export function drawOverlaysInPage(args: {
         }
 
         noteCands.forEach((note, ni) => {
-        let score = (di < 8 ? di * 30 : 240 + (di - 8) * 15) + li * 25 + ni * 20 + ai * 40; // prefer upper-left, short, centered
+        let hard = 0;
+        // preferences: upper-left, short, centered anchor, note beyond the badge
+        let soft = (di < 8 ? di * 30 : 240 + (di - 8) * 15) + li * 25 + ni * 20 + ai * 40;
+        // consistency: same direction and length as the other arrows looks calmer
+        if (!only) for (const o of others) soft += (o.di !== di ? 250 : 0) + (o.li !== li ? 120 : 0);
         const parts: [Box, number][] = [[lineBox(tail, tip, 2), OUTSIDE], ...(badge ? [[badge, OUTSIDE] as [Box, number]] : []), ...(note ? [[note, OUTSIDE_NOTE] as [Box, number]] : [])];
         for (const [p, cost] of parts) {
-          if (!inside(p, doc, 0)) score += 1e9;  // cannot be shown at all
-          else if (!inside(p, view)) score += cost; // outside the screenshot area
+          if (!inside(p, doc, 0)) hard += 1e9;  // cannot be shown at all
+          else if (!inside(p, view)) {
+            if (cost >= 1e6) hard += cost;      // viewport shots and videos: outside means cut off
+            else soft += cost;                  // element shots: the crop grows a little
+          }
         }
         // collisions with other marks (the own element is avoided by construction)
         markBoxes.forEach((mb, j) => {
           if (j === i) return;
           const grown = { x: mb.x - 3, y: mb.y - 3, w: mb.w + 6, h: mb.h + 6 };
-          if (segBox(tail, tip, grown)) score += 5e4;
-          if (badge) score += overlap(grow(badge, GAP), grown) * 40;
-          if (note) score += overlap(grow(note, GAP), grown) * 40;
+          if (segBox(tail, tip, grown)) hard += 5e4;
+          for (const pp of [badge, note]) {
+            if (!pp) continue;
+            const real = overlap(pp, grown);
+            hard += real * 40;
+            soft += (overlap(grow(pp, GAP), grown) - real) * 40; // too close, but not touching
+          }
         });
-        if (note) score += overlap(note, box) * 40;
-        if (badge) score += overlap(badge, box) * 40;
+        if (note) hard += overlap(note, box) * 40;
+        if (badge) hard += overlap(badge, box) * 40;
         // the own note must not sit on the own arrow
-        if (note && segBox(tail, tip, note)) score += 3e4;
+        if (note && segBox(tail, tip, note)) hard += 3e4;
         // collisions with other arrows, badges and notes
         for (const l of placedLines) {
           if (l.mark === i) continue;
-          if (segSeg(tail, tip, l.a, l.b)) score += 5e4;
-          for (const p of [badge, note]) if (p && segBox(l.a, l.b, grow(p, 4))) score += 3e4;
+          if (segSeg(tail, tip, l.a, l.b)) hard += 5e4;
+          for (const p of [badge, note]) if (p && segBox(l.a, l.b, grow(p, 4))) hard += 3e4;
         }
         for (const pb of placedBoxes) {
           if (pb.mark === i) continue;
-          if (segBox(tail, tip, grow(pb.box, 4))) score += 5e4;
-          if (badge) score += overlap(grow(badge, GAP), pb.box) * 60;
-          if (note) score += overlap(grow(note, GAP), pb.box) * 60;
+          if (segBox(tail, tip, grow(pb.box, 4))) hard += 5e4;
+          for (const pp of [badge, note]) {
+            if (!pp) continue;
+            const real = overlap(pp, pb.box);
+            hard += real * 60;
+            soft += (overlap(grow(pp, GAP), pb.box) - real) * 60;
+          }
         }
         // covering page text: sample the line, area for badge/note
         for (let s = 1; s < 12; s++) {
           const p = { x: tail.x + ((tip.x - tail.x) * s) / 12, y: tail.y + ((tip.y - tail.y) * s) / 12 };
-          if (local.some((o) => ptIn(p, o))) score += 400; // a line through text hides letters
+          if (local.some((o) => ptIn(p, o))) soft += 400; // a line through text hides letters
         }
         for (const o of local) {
-          if (badge) score += overlap(badge, o) * 5;
-          if (note) score += overlap(note, o) * 1.5;
+          if (badge) soft += overlap(badge, o) * 5;
+          if (note) soft += overlap(note, o) * 1.5;
         }
-        if (!best || score < best.score) best = { tail, tip, dir, badge, note, score };
+        const score = hard + soft;
+        if (!best || score < best.score) best = { tail, tip, dir, di, li, badge, note, score, hard };
         });
       });
-    }));
+      });
+    });
     return best!;
   };
 
@@ -393,6 +419,7 @@ export function drawOverlaysInPage(args: {
   // although swapping sides would be free. Try several orders and keep the best total.
   const solve = (order: number[]): number => {
     for (const i of arrowIdx) unregister(i);
+    arrowPlan.fill(undefined);
     for (const i of order) register(i, (arrowPlan[i] = planArrow(i)));
     // refinement: each arrow again, with all the others in place
     for (let pass = 0; pass < 2; pass++) {
@@ -412,6 +439,38 @@ export function drawOverlaysInPage(args: {
       : [arrowIdx, [...arrowIdx].reverse(), ...arrowIdx.map((_, k) => [...arrowIdx.slice(k), ...arrowIdx.slice(0, k)])];
   let bestTotal = Infinity;
   let bestPlans: (ArrowPlan | undefined)[] = [];
+  let uniformTotal = Infinity;
+  let uniformPlans: (ArrowPlan | undefined)[] = [];
+
+  // 1. uniform: all arrows with the same direction and length – if that works without any conflict
+  if (arrowIdx.length >= 2) {
+    for (let di = 0; di < DIRS.length; di++) {
+      for (let li = 0; li < LENGTHS.length; li++) {
+        for (const i of arrowIdx) unregister(i);
+        arrowPlan.fill(undefined);
+        let total = 0;
+        let ok = true;
+        for (let pass = 0; pass < 2 && ok; pass++) {
+          total = 0;
+          for (const i of arrowIdx) {
+            if (pass) unregister(i);
+            const plan = planArrow(i, { di, li });
+            if (plan.hard > 0) { ok = false; break; }
+            register(i, (arrowPlan[i] = plan));
+            total += plan.score;
+          }
+        }
+        if (ok && total < uniformTotal) {
+          uniformTotal = total;
+          uniformPlans = [...arrowPlan];
+        }
+      }
+    }
+    for (const i of arrowIdx) unregister(i);
+    arrowPlan.fill(undefined);
+  }
+
+  // 2. free placement in several orders – deviations from the other arrows cost a little
   for (const order of orders) {
     const total = solve(order);
     if (total < bestTotal) {
@@ -420,6 +479,9 @@ export function drawOverlaysInPage(args: {
     }
     if (bestTotal < 1e4) break; // no collisions left – good enough
   }
+  // uniform wins unless it covers clearly more text than the free layout (≈ 4 line samples over text)
+  const UNIFORM_TOLERANCE = 1600;
+  if (uniformPlans.length && uniformTotal <= bestTotal + UNIFORM_TOLERANCE) bestPlans = uniformPlans;
   for (const i of arrowIdx) unregister(i);
   for (const i of arrowIdx) register(i, (arrowPlan[i] = bestPlans[i]!));
 

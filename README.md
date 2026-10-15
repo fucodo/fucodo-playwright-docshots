@@ -315,8 +315,9 @@ the real text boxes on the page, measured per text node, so empty space inside w
 1. Outlines and their badges are fixed by the marked elements.
 2. Each arrow tries 8 directions × 4 lengths, with its note beyond or beside the badge.
 3. Every candidate is scored. Leaving the screenshot area (viewport, full page, or the crop of an element shot) costs the most. Next come crossing another arrow, another marked element, a badge or a note, and getting closer than 10 px to another badge or note. Covering page text costs least.
-4. Arrows are placed one after another, then each one is placed again with all others in place (two refinement passes).
-5. Notes of outlines are placed last, avoiding everything above.
+4. **Uniform first:** all arrows with the same direction and length, trying every combination. This is used if it works without any conflict and covers at most slightly more text than a free layout.
+5. **Otherwise free:** arrows are placed in several orders (all orders for up to 4 arrows), each with two refinement passes, and the best total wins. Deviating from the other arrows' direction or length still costs a little, so only the arrows that have to deviate do.
+6. Notes of outlines are placed before the arrows (so arrows avoid them) and once more afterwards.
 
 For element shots the crop grows to include whatever was drawn for the marks inside it.
 If a layout still has problems because there was no free space, the test gets a
