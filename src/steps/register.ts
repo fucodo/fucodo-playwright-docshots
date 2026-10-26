@@ -5,7 +5,7 @@ import { peer } from '../peer';
 import type { Docshot } from '../fixture';
 import { createCredentialsResolver, type Credentials, type CredentialsResolver, type PersonaRegistry } from '../credentials';
 import type { DocshotLanguage } from '../sources/rst';
-import { AMBIGUOUS_HINT, describeTarget, invalidSelectorMessage, resolveTarget, type AreaRegistry } from './targets';
+import { AMBIGUOUS_HINT, describeTarget, invalidSelectorMessage, resolveTarget, type AreaRegistry, type LabelAffixes } from './targets';
 import { groupNames, VOCABULARY, type VocabContext } from './vocabulary';
 import { analyze, type AnalyzeJob } from '../ai/analyze';
 
@@ -23,6 +23,11 @@ export interface DocshotAdapters {
   credentials?: CredentialsResolver;
   /** Named areas, e.g. { 'Formular "Person anlegen"': page => page.locator('form#person') } */
   areas?: AreaRegistry;
+  /**
+   * Optional text around labels that steps may leave out, e.g. { prefixes: ['[✓] '], suffixes: [' *'] }:
+   * `den Button "Speichern"` then also finds "[✓] Speichern" and "Speichern *".
+   */
+  labels?: LabelAffixes;
   /** Which vocabularies to register. Default: both. */
   languages?: DocshotLanguage[];
   /** Skip built-in steps by key (see VOCABULARY), e.g. to replace 'login' with your own. */
@@ -57,12 +62,12 @@ export function registerDocshotSteps<T extends TestType<any, any>>(test: T, adap
       resolveTarget(page, kind, name, adapters.areas, {
         ...refine,
         within: refine?.scopeKind || refine?.landmark ? undefined : docshot.activeArea,
-      }),
+      }, adapters.labels),
     setArea: async (spec) => {
       if (!spec) return docshot.clearArea();
       const locator = spec.landmark
-        ? resolveTarget(page, 'Bereich', spec.landmark, adapters.areas)
-        : resolveTarget(page, spec.kind!, spec.name ?? '', adapters.areas);
+        ? resolveTarget(page, 'Bereich', spec.landmark, adapters.areas, {}, adapters.labels)
+        : resolveTarget(page, spec.kind!, spec.name ?? '', adapters.areas, {}, adapters.labels);
       await docshot.setArea(locator, spec.landmark ?? describeTarget(spec.kind!, spec.name ?? ''));
     },
     scrollTo: (target) => docshot.scrollIntoView(target),

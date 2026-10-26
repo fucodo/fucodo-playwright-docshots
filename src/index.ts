@@ -4,7 +4,7 @@ export {
   type DocshotFixtures, type DocshotOptions, type DocshotVariant, type CaptureOptions, type ManifestEntry,
 } from './fixture';
 export { registerDocshotSteps, type DocshotAdapters, type LoginContext } from './steps/register';
-export { resolveTarget, TARGET_KINDS, type AreaRegistry } from './steps/targets';
+export { labelMatcher, resolveTarget, TARGET_KINDS, type AreaRegistry, type LabelAffixes } from './steps/targets';
 export { VOCABULARY, type VocabEntry } from './steps/vocabulary';
 export { createCredentialsResolver, envName, type Persona, type PersonaRegistry, type Credentials, type CredentialsResolver } from './credentials';
 export { extractAll, rewriteLocations } from './sources/extract';

@@ -98,6 +98,7 @@ export const { Given, When, Then } = registerDocshotSteps(test, {
     'Formular "Person anlegen"': (page) => page.locator('dialog[open]'),
     'Hauptmenü': (page) => page.getByRole('navigation'),   // usable as: Bereich "Hauptmenü"
   },
+  labels: { prefixes: ['[✓] '], suffixes: [' *'] },       // optional, see "Optional label prefixes and suffixes"
 });
 ```
 
@@ -188,13 +189,39 @@ Write a target as `<Art> "<Name>"`, with an optional article (`den`, `die`, `das
 | Art (de / en) | Locator |
 |---|---|
 | Button, Schaltfläche / button | `getByRole('button', { name, exact })` |
-| Feld, Eingabefeld / field | `getByLabel(name, { exact })` |
+| Feld, Eingabefeld / field | `getByLabel(name, { exact })` (or a whole-string pattern with the optional `labels` affixes) |
 | Link, Tab, Menüpunkt, Checkbox, Radio, Auswahl, Überschrift, Dialog | matching ARIA role |
 | Zeile / row | row containing the text |
 | Text | `getByText(name, { exact })` |
 | Bereich "X" / area "X" | `areas['X']` |
 | anything else, e.g. Formular "X" | `areas['Formular "X"']` |
 | Selektor / selector | raw CSS (dev escape hatch) |
+
+**Optional label prefixes and suffixes.** Some UIs put markers into the label text itself, e.g.
+`<button>[✓] Speichern</button>` or `<label>E-Mail *</label>`. List them once in `registerDocshotSteps()`
+so steps can leave them out:
+
+```ts
+registerDocshotSteps(test, {
+  // …
+  labels: {
+    prefixes: ['[✓] ', '[ ] '],   // optional text before a label
+    suffixes: [' *'],             // optional text after a label
+  },
+});
+```
+
+```gherkin
+Wenn ich auf den Button "Speichern" klicke        # finds "Speichern" and "[✓] Speichern"
+Dann markiere das Feld "E-Mail" mit "1"           # finds "E-Mail" and "E-Mail *"
+```
+
+- The affixes are **optional**: labels without them are still found. At most one prefix and one suffix are skipped per label.
+- They apply to every name that Playwright looks up by text: button, link, tab, menu item, checkbox, radio, select, heading, dialog, list, table, field and text, and also to scopes such as `im Dialog "Person anlegen"`.
+- The rest of the label still has to match exactly, including case. `"Speichern"` does not find `"[✓] Speichern und schließen"`.
+- Whitespace inside affixes is flexible, so `'[✓] '` also matches `[✓]Speichern` and `[✓]  Speichern`.
+- They don't apply to `Zeile "…"` (rows match parts of their text anyway), CSS selectors or named areas.
+- The step files are part of the fingerprint, so changing `labels` marks recipes as changed in `docshots update`.
 
 **The same text twice on a page?** Narrow it down. This works in every step (click, fill, mark, arrow, scroll, screenshot, video):
 
