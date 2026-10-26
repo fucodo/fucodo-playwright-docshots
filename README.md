@@ -65,7 +65,7 @@ export default defineDocshotConfig({
     languages: { de: {}, en: {} },         // → Accept-Language header + locale; override: { headers: {...}, locale: 'en-GB' }
   },
   output: 'Documentation/Images/Screenshots/{id}/{viewport}-{scheme}-{lang}.png',
-  keepClean: true,                         // also *.clean.png without annotations
+  keepClean: true,                         // also *.clean.png without annotations (skip per run: --no-clean)
   clock: '2026-09-15T09:30:00+02:00',      // frozen browser time
   theme: { color: '#d50c2f' },             // annotation colour
   maskColor: '#c9ced8',
@@ -394,6 +394,7 @@ To embed a video in RST, use whatever your renderer supports. With raw HTML enab
 npx docshots status            # what is new / changed / missing – no browser
 npx docshots update            # render only those recipes (= docshots test --changed)
 npx docshots status --check    # exit code 1 if images are outdated (CI)
+npx docshots stats             # counts: rendered / unrendered / changed (see "Statistics")
 ```
 
 Every scenario ("recipe") gets a fingerprint made of:
@@ -417,17 +418,139 @@ How it behaves:
 - Partial runs (`--grep`, `--project`) only record what actually ran.
 - Changes to the **application itself** (new layout, renamed buttons) cannot be seen from the steps. Run a full `docshots test` for that, e.g. nightly or before a release. Changes in page objects or fixtures outside the `steps` globs also need a full run.
 
-## CLI
+## Statistics
 
 ```bash
-npx docshots init                  # create docshots.config.ts, steps/index.ts, personas.ts
-npx docshots lint                  # no browser: syntax, duplicate IDs, unknown steps (errors point to file.rst:line)
-npx docshots test                  # extract + bddgen + playwright test + manifest + lock file
-npx docshots update                # only new/changed recipes (see "Update mode")
-npx docshots status [--check]      # what would be rendered
+npx docshots stats             # summary and table per source file – no browser
+npx docshots stats --json      # the same as JSON, e.g. for CI dashboards
+```
+
+```
+Rezepte: 23
+   2  gerendert und aktuell
+   3  noch nie gerendert (neu)
+   4  geändert seit dem letzten Rendern
+  14  gerendert, aber Dateien fehlen
+  ──
+  21  zu rendern (npx docshots update)
+
+Dateien laut Lock-File: 49 Screenshots, 49 ohne Markierungen (.clean), 8 Videos, 49 fehlen
+
+  Quelle                                          gesamt  aktuell  zu rendern
+  Documentation/Admin/Persons.rst                      3        0           3
+  Documentation/Screenshots/status-feeds.feature       3        1           2
+```
+
+The counts use the same comparison as `docshots status`: **rendered** = up to date,
+**unrendered** = not in the lock file yet, **changed** = fingerprint differs, plus recipes whose files are missing.
+File counts come from the lock file, so new recipes add files only after their first run.
+
+## CLI
+
+Every command runs in the project root. Paths are relative to it.
+
+**Shared options**
+
+| Option | Default | Description |
+|---|---|---|
+| `-c`, `--config <file>` | `docshots.config.ts` | docshots configuration (`lint`, `test`, `update`, `status`, `stats`, `steps`, `from-image`) |
+| `--work-dir <dir>` | `.docshots` | working directory for generated features, results and the manifest |
+
+### `docshots init`
+
+Creates `docshots.config.ts`, `steps/index.ts` and `personas.ts`, and adds `.docshots/` to `.gitignore` (see "Setup").
+
+| Option | Default | Description |
+|---|---|---|
+| `--dir <dir>` | `Tests/Playwright` (or what exists) | folder for the step entry point and personas |
+| `--lang de\|en` | `de` | language of the generated example steps |
+| `--force` | – | overwrite existing files |
+
+### `docshots lint`
+
+Checks without a browser: Gherkin syntax, duplicate IDs, unknown steps and the setup.
+Errors point to `file.rst:line`. Exit code 1 on errors.
+
+### `docshots test`
+
+Extracts the RST blocks, generates the tests (bddgen), runs Playwright, then writes
+`.docshots/manifest.json` and `docshots.lock.json`.
+
+| Option | Description |
+|---|---|
+| `--changed` | render only new/changed recipes and recipes with missing files (same as `docshots update`) |
+| `--no-clean` | don't write `*.clean.png` in this run, even with `keepClean: true` |
+| *Playwright arguments* | passed through, e.g. `--grep person-create`, `--project desktop-light-de`, `--workers 2`, `--headed` |
+
+`--no-clean` makes a run faster without changing any fingerprint. Existing clean images stay as they
+are and may be outdated, and the lock file only lists the files of the last run. To never write them,
+set `keepClean: false` (the default) in the config.
+
+### `docshots update`
+
+Same as `docshots test --changed` (see "Update mode"). It takes the same options (`--no-clean`, Playwright arguments).
+If nothing changed, it exits without starting a browser.
+
+### `docshots status`
+
+Lists every recipe as new / changed / files missing / unchanged / removed. No browser.
+
+| Option | Description |
+|---|---|
+| `--check` | exit code 1 if anything has to be rendered or was removed (for CI) |
+
+### `docshots stats`
+
+Statistics: rendered, unrendered and changed recipes, files per kind, and a table per source file (see "Statistics"). No browser.
+`docshots statistics` is an alias.
+
+| Option | Description |
+|---|---|
+| `--json` | print the statistics as JSON |
+
+### `docshots steps`
+
+Writes the list of all available steps, including your project steps, as an RST page.
+
+| Option | Default | Description |
+|---|---|---|
+| `--out <file.rst>` | stdout | output file |
+| `--lang de\|en` | `de` | language of the examples |
+
+### `docshots manifest`
+
+Merges the per-capture entries of the last run into `.docshots/manifest.json`. `test` and `update` do this on their own.
+
+### `docshots from-image [image]`
+
+Generates steps from an old screenshot with a vision model (see "Converting old screenshots").
+
+| Option | Default | Description |
+|---|---|---|
+| `--url <path>` | asked | page where the image is made today, relative to `baseURL` |
+| `--persona <name>` | asked (empty = no login) | log in as this persona |
+| `--id <id>` | image file name | screenshot ID |
+| `--lang de\|en` | `de` | language of the steps and the UI |
+| `--viewport <name>` | `desktop` | viewport from the config |
+| `--attempts <n>` | `3` | correction rounds |
+| `--insert` | – | insert the block into the RST file that uses the image, and switch the image path |
+| `--docs <glob>` | `Documentation/**/*.rst` | RST files searched by `--insert` |
+| `--yes`, `-y` | – | never ask (CI) |
+| `--help`, `-h` | – | help for this command |
+
+### `docshots help`
+
+Prints the command overview (also `--help`, or no command).
+
+**Examples**
+
+```bash
 npx docshots test --grep person-create --project desktop-light-de
-npx docshots steps --out Documentation/Screenshots/Schritte.rst
-npx docshots from-image <old.png> [--url /path] [--persona name] [--insert]
+npx docshots update --no-clean
+npx docshots status --check
+npx docshots stats --json
+npx docshots steps --out Documentation/Screenshots/Schritte.rst --lang de
+npx docshots from-image Documentation/Images/benutzer.png --url /administration/persons --insert
 ```
 
 `.docshots/manifest.json` lists every image with its variant, annotation

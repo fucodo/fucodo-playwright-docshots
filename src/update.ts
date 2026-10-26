@@ -177,6 +177,79 @@ export function compare(recipes: Recipe[], lock: LockFile, rootDir: string): { s
   return { statuses, removed };
 }
 
+// ── statistics ─────────────────────────────────────────────────────────────
+
+export interface FileCounts {
+  screenshots: number;
+  clean: number;
+  videos: number;
+}
+
+export interface SourceStatistics {
+  /** RST or feature file, without line */
+  source: string;
+  total: number;
+  rendered: number;
+  toRender: number;
+}
+
+export interface Statistics {
+  recipes: {
+    total: number;
+    /** up to date */
+    rendered: number;
+    /** never rendered (not in the lock file) */
+    unrendered: number;
+    /** steps, tags, config or step files changed */
+    changed: number;
+    /** rendered, but files listed in the lock file are gone */
+    missingFiles: number;
+    /** unrendered + changed + missingFiles */
+    toRender: number;
+    /** in the lock file, but no longer in the sources */
+    removed: number;
+  };
+  /** files recorded in the lock file for current recipes */
+  files: FileCounts & { missing: number };
+  bySource: SourceStatistics[];
+}
+
+const VIDEO_EXT = /\.(mp4|webm)$/i;
+
+export function statistics(statuses: RecipeStatus[], removed: string[], lock: LockFile): Statistics {
+  const count = (reason: RecipeStatus['reason']) => statuses.filter((s) => s.reason === reason).length;
+  const files = { screenshots: 0, clean: 0, videos: 0, missing: 0 };
+  const bySource = new Map<string, SourceStatistics>();
+  for (const st of statuses) {
+    for (const f of lock.recipes[st.recipe.id]?.files ?? []) {
+      if (VIDEO_EXT.test(f)) files.videos++;
+      else if (/\.clean\.[a-z]+$/i.test(f)) files.clean++;
+      else files.screenshots++;
+    }
+    files.missing += st.missing?.length ?? 0;
+    const source = st.recipe.file.replace(/:\d+$/, '');
+    const s = bySource.get(source) ?? { source, total: 0, rendered: 0, toRender: 0 };
+    s.total++;
+    if (st.reason === 'unverändert') s.rendered++;
+    else s.toRender++;
+    bySource.set(source, s);
+  }
+  const rendered = count('unverändert');
+  return {
+    recipes: {
+      total: statuses.length,
+      rendered,
+      unrendered: count('neu'),
+      changed: count('geändert'),
+      missingFiles: count('Dateien fehlen'),
+      toRender: statuses.length - rendered,
+      removed: removed.length,
+    },
+    files,
+    bySource: [...bySource.values()].sort((a, b) => a.source.localeCompare(b.source)),
+  };
+}
+
 // ── results of a run ───────────────────────────────────────────────────────
 
 export interface TestResult {

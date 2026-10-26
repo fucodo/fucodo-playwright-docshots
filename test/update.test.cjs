@@ -91,3 +91,27 @@ test('lock: failed recipes are not recorded, removed recipes are forgotten', () 
   assert.equal(lock.recipes.gone, undefined);
   assert.equal(lock.recipes['shot-one'], undefined);
 });
+
+test('statistics: rendered, unrendered, changed and files per kind', () => {
+  const { statistics } = require('../dist/update');
+  const st = (id, reason, file, missing) => ({ recipe: { id, file, name: id, fingerprint: 'f' }, reason, missing });
+  const statuses = [
+    st('a', 'unverändert', 'Documentation/A.rst:3'),
+    st('b', 'neu', 'Documentation/A.rst:12'),
+    st('c', 'geändert', 'features/c.feature:5'),
+    st('d', 'Dateien fehlen', 'features/c.feature:9', ['img/d/desktop.png']),
+  ];
+  const lock = { version: 1, recipes: {
+    a: { fingerprint: 'f', files: ['img/a/desktop.png', 'img/a/desktop.clean.png', 'vid/a/desktop.mp4'], updated: '' },
+    c: { fingerprint: 'old', files: ['img/c/desktop.png'], updated: '' },
+    d: { fingerprint: 'f', files: ['img/d/desktop.png'], updated: '' },
+    gone: { fingerprint: 'f', files: [], updated: '' },
+  } };
+  const s = statistics(statuses, ['gone'], lock);
+  assert.deepEqual(s.recipes, { total: 4, rendered: 1, unrendered: 1, changed: 1, missingFiles: 1, toRender: 3, removed: 1 });
+  assert.deepEqual(s.files, { screenshots: 3, clean: 1, videos: 1, missing: 1 });
+  assert.deepEqual(s.bySource, [
+    { source: 'Documentation/A.rst', total: 2, rendered: 1, toRender: 1 },
+    { source: 'features/c.feature', total: 2, rendered: 0, toRender: 2 },
+  ]);
+});

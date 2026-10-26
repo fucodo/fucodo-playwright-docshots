@@ -48,7 +48,7 @@ export interface DocshotConfig {
   };
   /** Output template: {id} {viewport} {scheme} {lang} {project}. Default below. */
   output?: string;
-  /** Also write *.clean.png without overlays. Default false */
+  /** Also write *.clean.png without overlays. Default false. `docshots test --no-clean` skips them for one run. */
   keepClean?: boolean;
   /** Freeze browser time (ISO), e.g. '2026-09-01T09:30:00+02:00' */
   clock?: string;
@@ -82,6 +82,8 @@ export interface DocshotConfig {
 export const DEFAULT_OUTPUT = 'Documentation/Images/Screenshots/{id}/{viewport}-{scheme}-{lang}.png';
 
 const EXTRACTED_ENV = 'DOCSHOTS_EXTRACTED';
+/** Set by `docshots test --no-clean`: skip *.clean.png for this run, whatever keepClean says. */
+export const NO_CLEAN_ENV = 'DOCSHOTS_NO_CLEAN';
 
 function viewportUse(spec: ViewportSpec, browserName: DocshotConfig['browserName']) {
   const { devices } = peer<typeof PlaywrightTest>('@playwright/test');
@@ -195,7 +197,8 @@ export function defineDocshotConfig(cfg: DocshotConfig): PlaywrightTestConfig {
         const docshotUse: Partial<DocshotOptions> = {
           docshotVariant: variant,
           docshotOutput: path.resolve(rootDir, cfg.output ?? DEFAULT_OUTPUT),
-          docshotKeepClean: cfg.keepClean ?? false,
+          // the override is not part of the fingerprint: a run without clean images doesn't outdate recipes
+          docshotKeepClean: (cfg.keepClean ?? false) && process.env[NO_CLEAN_ENV] !== '1',
           docshotTheme: theme,
           docshotClock: cfg.clock,
           docshotPadding: cfg.padding ?? 16,

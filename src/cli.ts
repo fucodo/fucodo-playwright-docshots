@@ -7,14 +7,16 @@ import { VOCABULARY } from './steps/vocabulary';
 import { fromImage } from './ai/command';
 import { peerLocations } from './peer';
 import { initProject } from './setup';
-import { collectRecipes, compare, ONLY_ENV, readLock, readStateInput, RESULTS_DIR, updateLock, type RecipeStatus } from './update';
+import { NO_CLEAN_ENV } from './config';
+import { collectRecipes, compare, ONLY_ENV, readLock, readStateInput, RESULTS_DIR, statistics, updateLock, type RecipeStatus, type Statistics } from './update';
 import type { DocshotLanguage } from './sources/rst';
 
 const HELP = `docshots – Doku-Screenshots aus Gherkin-Schritten
 
-  docshots test     [-c docshots.config.ts] [--changed] [playwright args…]   extrahieren, generieren, Screenshots erstellen
-  docshots update   [playwright args…]                            nur neue/geänderte Rezepte rendern (= test --changed)
+  docshots test     [-c docshots.config.ts] [--changed] [--no-clean] [playwright args…]   extrahieren, generieren, Screenshots erstellen
+  docshots update   [--no-clean] [playwright args…]               nur neue/geänderte Rezepte rendern (= test --changed)
   docshots status   [--check]                                     zeigen, welche Rezepte neu/geändert sind (kein Browser)
+  docshots stats    [--json]                                      Statistik: gerendert, nie gerendert, geändert (kein Browser)
   docshots lint     [-c docshots.config.ts]                       nur prüfen: Syntax, IDs, unbekannte Schritte (kein Browser)
   docshots steps    [-c docshots.config.ts] [--out Datei.rst] [--lang de|en]   Schritt-Übersicht als RST schreiben
   docshots manifest [--work-dir .docshots]                        manifest.json aus dem letzten Lauf zusammenführen
@@ -112,6 +114,29 @@ function printStatus(statuses: RecipeStatus[], removed: string[], rootDir: strin
   void rootDir;
 }
 
+function printStatistics(s: Statistics) {
+  const r = s.recipes;
+  const w = String(r.total).length;
+  const row = (n: number, label: string) => console.log(`  ${String(n).padStart(w)}  ${label}`);
+  console.log(`Rezepte: ${r.total}`);
+  row(r.rendered, 'gerendert und aktuell');
+  row(r.unrendered, 'noch nie gerendert (neu)');
+  row(r.changed, 'geändert seit dem letzten Rendern');
+  row(r.missingFiles, 'gerendert, aber Dateien fehlen');
+  console.log(`  ${'─'.repeat(w)}`);
+  row(r.toRender, 'zu rendern (npx docshots update)');
+  if (r.removed) row(r.removed, 'entfernt (nur noch im Lock-File)');
+  const f = s.files;
+  console.log(`\nDateien laut Lock-File: ${f.screenshots} Screenshots, ${f.clean} ohne Markierungen (.clean), ${f.videos} Videos${f.missing ? `, ${f.missing} fehlen` : ''}`);
+  if (s.bySource.length) {
+    const width = Math.max(...s.bySource.map((x) => x.source.length), 'Quelle'.length);
+    console.log(`\n  ${'Quelle'.padEnd(width)}  gesamt  aktuell  zu rendern`);
+    for (const x of s.bySource) {
+      console.log(`  ${x.source.padEnd(width)}  ${String(x.total).padStart(6)}  ${String(x.rendered).padStart(7)}  ${String(x.toRender).padStart(10)}`);
+    }
+  }
+}
+
 /** Removes per-capture manifest entries of the recipes that are about to run (all, if ids is undefined). */
 function clearManifestEntries(workDir: string, ids?: Set<string>) {
   const dir = path.resolve(workDir, 'manifest');
@@ -206,7 +231,9 @@ async function main() {
     case 'test': {
       // update mode: only new/changed recipes and recipes with missing files
       const changedOnly = command === 'update' || rest.includes('--changed');
-      const pwArgs = rest.filter((a) => a !== '--changed');
+      // --no-clean: no *.clean.png in this run, even with keepClean: true
+      if (rest.includes('--no-clean')) process.env[NO_CLEAN_ENV] = '1';
+      const pwArgs = rest.filter((a) => a !== '--changed' && a !== '--no-clean');
       const gen = await run(binOf('playwright-bdd', 'bddgen'), ['-c', config], workDir);
       if (gen.code !== 0) {
         await hintIfMissingSteps(gen.output, config);
@@ -255,6 +282,18 @@ async function main() {
       process.exit(rest.includes('--check') && (todo || removed.length) ? 1 : 0);
     }
     // falls through
+    case 'stats':
+    case 'statistics': {
+      const gen = await run(binOf('playwright-bdd', 'bddgen'), ['-c', config], workDir);
+      if (gen.code !== 0) process.exit(gen.code);
+      const input = readStateInput(path.resolve(workDir));
+      const lock = readLock(input.lockFile);
+      const { statuses, removed } = compare(collectRecipes(input), lock, input.rootDir);
+      const stats = statistics(statuses, removed, lock);
+      if (rest.includes('--json')) process.stdout.write(JSON.stringify(stats, null, 2) + '\n');
+      else printStatistics(stats);
+      return;
+    }
     case 'steps': {
       const projectSteps = await exportProjectSteps(config);
       const rst = cheatSheet(lang, projectSteps);
