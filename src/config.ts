@@ -8,7 +8,8 @@ import type { DocshotOptions, DocshotVariant } from './fixture';
 import type { OverlayTheme } from './overlay';
 import { extractAll } from './sources/extract';
 import { checkSetup, formatWarnings } from './setup';
-import { DEFAULT_VIDEO, FFMPEG_HINT, findFfmpeg, type VideoOptions } from './video';
+import { DEFAULT_VIDEO, FFMPEG_HINT, findFfmpeg, withFormat, type VideoOptions } from './video';
+import { DEFAULT_IMAGE, withImageFormat, type ImageFormat } from './image';
 import { hashFiles, sha, writeStateInput } from './update';
 import fg from 'fast-glob';
 
@@ -46,9 +47,13 @@ export interface DocshotConfig {
     schemes?: ('light' | 'dark')[];
     languages?: Record<string, LanguageSpec | Record<string, string>>;
   };
-  /** Output template: {id} {viewport} {scheme} {lang} {project}. Default below. */
+  /** Output template: {id} {viewport} {scheme} {lang} {project}. Default below. The extension follows imageFormat. */
   output?: string;
-  /** Also write *.clean.png without overlays. Default false. `docshots test --no-clean` skips them for one run. */
+  /** 'webp' (default), 'png' or 'jpeg'. WebP needs Chromium or Firefox. */
+  imageFormat?: ImageFormat;
+  /** 1–100 for webp and jpeg. Default 90; 100 = lossless WebP, but larger than PNG */
+  imageQuality?: number;
+  /** Also write *.clean.<ext> without overlays. Default false. `docshots test --no-clean` skips them for one run. */
   keepClean?: boolean;
   /** Freeze browser time (ISO), e.g. '2026-09-01T09:30:00+02:00' */
   clock?: string;
@@ -79,10 +84,10 @@ export interface DocshotConfig {
   bdd?: Record<string, unknown>;
 }
 
-export const DEFAULT_OUTPUT = 'Documentation/Images/Screenshots/{id}/{viewport}-{scheme}-{lang}.png';
+export const DEFAULT_OUTPUT = 'Documentation/Images/Screenshots/{id}/{viewport}-{scheme}-{lang}.webp';
 
 const EXTRACTED_ENV = 'DOCSHOTS_EXTRACTED';
-/** Set by `docshots test --no-clean`: skip *.clean.png for this run, whatever keepClean says. */
+/** Set by `docshots test --no-clean`: skip *.clean.<ext> for this run, whatever keepClean says. */
 export const NO_CLEAN_ENV = 'DOCSHOTS_NO_CLEAN';
 
 function viewportUse(spec: ViewportSpec, browserName: DocshotConfig['browserName']) {
@@ -162,10 +167,24 @@ export function defineDocshotConfig(cfg: DocshotConfig): PlaywrightTestConfig {
       language: typeof cfg.language === 'string' ? cfg.language : 'de',
       global: sha({
         version,
-        variants: cfg.variants, output: cfg.output, keepClean: cfg.keepClean, clock: cfg.clock, theme: cfg.theme,
+        variants: cfg.variants, output: cfg.output, keepClean: cfg.keepClean,
+        // the effective format: a new default changes every file
+        imageFormat: cfg.imageFormat ?? DEFAULT_IMAGE.format, imageQuality: cfg.imageQuality ?? DEFAULT_IMAGE.quality, clock: cfg.clock, theme: cfg.theme,
         padding: cfg.padding, maskColor: cfg.maskColor, video: cfg.video, browserName: cfg.browserName,
         steps: hashFiles(rootDir, cfg.steps),
       }),
+      // which files every recipe should have, so "docshots update" also finds files missing from the lock file
+      expected: {
+        image: path.resolve(rootDir, withImageFormat(cfg.output ?? DEFAULT_OUTPUT, cfg.imageFormat ?? DEFAULT_IMAGE.format)),
+        video: path.resolve(rootDir, withFormat(cfg.video?.output ?? DEFAULT_VIDEO.output, cfg.video?.format ?? DEFAULT_VIDEO.format)),
+        // --no-clean: missing clean images don't count as missing in this run
+        keepClean: (cfg.keepClean ?? false) && process.env[NO_CLEAN_ENV] !== '1',
+        variants: Object.keys(cfg.variants.viewports).flatMap((viewport) =>
+          (cfg.variants.schemes ?? ['light']).flatMap((scheme) =>
+            Object.keys(cfg.variants.languages ?? { de: {} }).map((lang) => ({ project: `${viewport}-${scheme}-${lang}`, viewport, scheme, lang })),
+          ),
+        ),
+      },
     });
   }
 
@@ -189,6 +208,9 @@ export function defineDocshotConfig(cfg: DocshotConfig): PlaywrightTestConfig {
     ...cfg.theme,
   };
 
+  const image = { format: cfg.imageFormat ?? DEFAULT_IMAGE.format, quality: cfg.imageQuality ?? DEFAULT_IMAGE.quality };
+  const output = withImageFormat(cfg.output ?? DEFAULT_OUTPUT, image.format);
+
   const projects: Project[] = [];
   for (const [vpName, vpSpec] of Object.entries(viewports)) {
     for (const scheme of schemes) {
@@ -196,7 +218,8 @@ export function defineDocshotConfig(cfg: DocshotConfig): PlaywrightTestConfig {
         const variant: DocshotVariant = { viewport: vpName, scheme, lang };
         const docshotUse: Partial<DocshotOptions> = {
           docshotVariant: variant,
-          docshotOutput: path.resolve(rootDir, cfg.output ?? DEFAULT_OUTPUT),
+          docshotOutput: path.resolve(rootDir, output),
+          docshotImage: image,
           // the override is not part of the fingerprint: a run without clean images doesn't outdate recipes
           docshotKeepClean: (cfg.keepClean ?? false) && process.env[NO_CLEAN_ENV] !== '1',
           docshotTheme: theme,
@@ -235,6 +258,6 @@ export function defineDocshotConfig(cfg: DocshotConfig): PlaywrightTestConfig {
     fullyParallel: base.fullyParallel ?? true,
     reporter: base.reporter ?? [['list'], ['html', { open: 'never', outputFolder: path.join(workDir, 'report') }]],
     projects,
-    metadata: { ...base.metadata, docshots: { rootDir, workDir, generatedDir, output: cfg.output ?? DEFAULT_OUTPUT } },
+    metadata: { ...base.metadata, docshots: { rootDir, workDir, generatedDir, output } },
   };
 }

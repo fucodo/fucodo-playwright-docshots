@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import fg from 'fast-glob';
-import { slug } from './util';
+import { fillTemplate, readDocshotTags, slug } from './util';
 
 /**
  * Update mode: every scenario ("recipe") gets a fingerprint. docshots.lock.json remembers the
@@ -20,6 +20,22 @@ export interface StateInput {
   language: string;
   /** hash over everything that affects every recipe (config, package version, step files) */
   global: string;
+  /** what every recipe should produce – used to find missing files the lock file doesn't list */
+  expected?: ExpectedOutput;
+}
+
+export interface ExpectedOutput {
+  /** absolute templates, extension already matching the format */
+  image: string;
+  video: string;
+  /** *.clean.<ext> next to each screenshot */
+  keepClean: boolean;
+  variants: { project: string; viewport: string; scheme: string; lang: string }[];
+}
+
+export interface Capture {
+  id: string;
+  kind: 'screenshot' | 'video';
 }
 
 export const STATE_INPUT_FILE = 'state-input.json';
@@ -32,11 +48,15 @@ export interface Recipe {
   file: string;
   name: string;
   fingerprint: string;
+  /** tags per scenario (outline examples: one entry each) – for @viewports: / @schemes: / @lang: */
+  tags?: string[][];
 }
 
 export interface LockEntry {
   fingerprint: string;
   files: string[];
+  /** screenshots and videos of the last run – to know which files every variant should have */
+  captures?: Capture[];
   source?: string;
   updated: string;
 }
@@ -94,7 +114,7 @@ function gherkin() {
 export function collectRecipes(input: StateInput): Recipe[] {
   const { g, m } = gherkin();
   const files = fg.sync(input.features, { absolute: true }).sort();
-  const byId = new Map<string, { file: string; name: string; parts: unknown[] }>();
+  const byId = new Map<string, { file: string; name: string; parts: { tags: string[]; steps: unknown[] }[] }>();
   // generated from RST: show the RST file and line instead of the generated feature
   const sourceMap = readSourceMap(input.workDir);
 
@@ -138,6 +158,7 @@ export function collectRecipes(input: StateInput): Recipe[] {
     file: e.file,
     name: e.name,
     fingerprint: sha({ id, parts: e.parts, global: input.global }),
+    tags: e.parts.map((p) => p.tags),
   }));
 }
 
@@ -163,12 +184,60 @@ export function writeLock(file: string, lock: LockFile): void {
   fs.writeFileSync(file, JSON.stringify({ version: 1, recipes }, null, 2) + '\n');
 }
 
-export function compare(recipes: Recipe[], lock: LockFile, rootDir: string): { statuses: RecipeStatus[]; removed: string[] } {
+/** Variants a recipe renders in: all, unless every scenario of it opts out via tags. */
+function variantsOf(recipe: Recipe, expected: ExpectedOutput): ExpectedOutput['variants'] {
+  const parts = recipe.tags?.length ? recipe.tags : [[]];
+  return expected.variants.filter((v) =>
+    parts.some((tags) => {
+      const t = readDocshotTags(tags);
+      return (!t.viewports || t.viewports.includes(v.viewport)) && (!t.schemes || t.schemes.includes(v.scheme)) && (!t.languages || t.languages.includes(v.lang));
+    }),
+  );
+}
+
+const cleanOf = (file: string) => file.replace(/(\.[a-z]+)$/i, '.clean$1');
+
+/** Captures of lock entries written before they were recorded: matched back from the file names. */
+function capturesFromFiles(files: string[], expected: ExpectedOutput, rootDir: string): Capture[] {
+  const found = new Map<string, Capture>();
+  const escape = (x: string) => x.replace(/[.*+?^$(){}|[\]\\]/g, '\\$&');
+  for (const [kind, template] of [['screenshot', expected.image], ['video', expected.video]] as const) {
+    for (const v of expected.variants) {
+      // {id} stays a placeholder, everything else is the variant
+      const filled = fillTemplate(path.relative(rootDir, template).split(path.sep).join('/'), v);
+      const re = new RegExp(`^${filled.split('{id}').map(escape).join('([^/]+)')}$`);
+      for (const f of files) {
+        const m = re.exec(f);
+        if (m && !(kind === 'screenshot' && /\.clean\.[a-z]+$/i.test(f))) found.set(`${kind}:${m[1]}`, { id: m[1], kind });
+      }
+    }
+  }
+  return [...found.values()];
+}
+
+/** Every file a recipe should have: what the lock file lists, plus each capture in each of its variants. */
+export function expectedFiles(recipe: Recipe, entry: LockEntry, expected: ExpectedOutput | undefined, rootDir: string): string[] {
+  const files = new Set(entry.files);
+  if (!expected) return [...files];
+  const rel = (f: string) => path.relative(rootDir, f).split(path.sep).join('/');
+  const captures = entry.captures ?? capturesFromFiles(entry.files, expected, rootDir);
+  for (const v of variantsOf(recipe, expected)) {
+    for (const c of captures) {
+      const file = fillTemplate(c.kind === 'video' ? expected.video : expected.image, { ...v, id: c.id });
+      files.add(rel(file));
+      if (c.kind === 'screenshot' && expected.keepClean) files.add(rel(cleanOf(file)));
+    }
+  }
+  return [...files].sort();
+}
+
+export function compare(recipes: Recipe[], lock: LockFile, rootDir: string, expected?: ExpectedOutput): { statuses: RecipeStatus[]; removed: string[] } {
   const statuses = recipes.map((recipe): RecipeStatus => {
     const entry = lock.recipes[recipe.id];
     if (!entry) return { recipe, reason: 'neu' };
     if (entry.fingerprint !== recipe.fingerprint) return { recipe, reason: 'geändert' };
-    const missing = entry.files.filter((f) => !fs.existsSync(path.resolve(rootDir, f)));
+    // also files the lock doesn't list: variants skipped by --project/--no-clean, deleted folders …
+    const missing = expectedFiles(recipe, entry, expected, rootDir).filter((f) => !fs.existsSync(path.resolve(rootDir, f)));
     if (missing.length) return { recipe, reason: 'Dateien fehlen', missing };
     return { recipe, reason: 'unverändert' };
   });
@@ -265,17 +334,19 @@ export function readResults(workDir: string): TestResult[] {
   return fs.readdirSync(dir).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
 }
 
-/** Files produced per recipe in this run, from the per-capture manifest entries. */
-export function filesByRecipe(workDir: string, rootDir: string): Map<string, string[]> {
+/** Files and captures produced per recipe in this run, from the per-capture manifest entries. */
+export function filesByRecipe(workDir: string, rootDir: string): Map<string, { files: string[]; captures: Capture[] }> {
   const dir = path.join(workDir, 'manifest');
-  const map = new Map<string, string[]>();
+  const map = new Map<string, { files: string[]; captures: Capture[] }>();
   if (!fs.existsSync(dir)) return map;
   for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json'))) {
     const e = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
     const recipe = e.recipe ?? e.id;
-    const list = map.get(recipe) ?? [];
-    for (const file of [e.file, e.cleanFile].filter(Boolean)) list.push(path.relative(rootDir, file).split(path.sep).join('/'));
-    map.set(recipe, list);
+    const out = map.get(recipe) ?? { files: [], captures: [] };
+    for (const file of [e.file, e.cleanFile].filter(Boolean)) out.files.push(path.relative(rootDir, file).split(path.sep).join('/'));
+    const kind = e.kind === 'video' ? 'video' : 'screenshot';
+    if (!out.captures.some((c) => c.id === e.id && c.kind === kind)) out.captures.push({ id: e.id, kind });
+    map.set(recipe, out);
   }
   return map;
 }
@@ -301,7 +372,14 @@ export function updateLock(input: StateInput, recipes: Recipe[], ran: Set<string
       continue;
     }
     if (!mine.some((r) => r.status === 'passed')) continue;
-    lock.recipes[recipe.id] = { fingerprint: recipe.fingerprint, files: [...new Set(files.get(recipe.id) ?? [])].sort(), source: recipe.file, updated: now };
+    const produced = files.get(recipe.id);
+    lock.recipes[recipe.id] = {
+      fingerprint: recipe.fingerprint,
+      files: [...new Set(produced?.files ?? [])].sort(),
+      captures: (produced?.captures ?? []).sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id)),
+      source: recipe.file,
+      updated: now,
+    };
     updated.push(recipe.id);
   }
   // forget recipes that no longer exist

@@ -14,7 +14,7 @@ existing fixtures and page objects.
 Documentation/**/*.rst ──extract──► .docshots/generated/*.feature ─┐
 Documentation/Screenshots/**/*.feature ────────────────────────────┼─► bddgen ─► playwright test
                                                                    ┘
-                     ► Documentation/Images/Screenshots/<id>/<viewport>-<scheme>-<lang>.png
+                     ► Documentation/Images/Screenshots/<id>/<viewport>-<scheme>-<lang>.webp
 ```
 
 ## Install
@@ -64,8 +64,10 @@ export default defineDocshotConfig({
     schemes: ['light', 'dark'],
     languages: { de: {}, en: {} },         // → Accept-Language header + locale; override: { headers: {...}, locale: 'en-GB' }
   },
-  output: 'Documentation/Images/Screenshots/{id}/{viewport}-{scheme}-{lang}.png',
-  keepClean: true,                         // also *.clean.png without annotations (skip per run: --no-clean)
+  output: 'Documentation/Images/Screenshots/{id}/{viewport}-{scheme}-{lang}.webp',
+  imageFormat: 'webp',                     // 'webp' (default), 'png' or 'jpeg' – the output extension follows it
+  imageQuality: 90,                        // webp/jpeg, 1–100 (default 90; 100 = lossless webp, larger than png)
+  keepClean: true,                         // also *.clean.webp without annotations (skip per run: --no-clean)
   clock: '2026-09-15T09:30:00+02:00',      // frozen browser time
   theme: { color: '#d50c2f' },             // annotation colour
   maskColor: '#c9ced8',
@@ -74,6 +76,12 @@ export default defineDocshotConfig({
 
 All device presets run in Chromium by default, for consistent rendering
 (`browserName: 'device-default'` keeps e.g. WebKit for iPhones).
+
+Screenshots are written as WebP by default: about half the size of PNG at quality 90. Playwright itself
+only writes PNG and JPEG, so the PNG is re-encoded by the browser (Chromium or Firefox – WebKit cannot
+encode WebP; use `imageFormat: 'png'` there). The extension in `output` is replaced to match the format,
+so an existing `….png` template now produces `….webp` – update your `figure::` paths or set
+`imageFormat: 'png'` to keep PNG.
 
 ### 2. Steps entry point: one shared `test`
 
@@ -150,7 +158,7 @@ The block is an RST comment (no `::`), so the renderer ignores it.
     Und markiere das Feld "E-Mail" mit "2" und Hinweis "Pflichtfeld"
     Und erstelle einen Screenshot vom Formular "Person anlegen"
 
-..  figure:: /Images/Screenshots/person-create/desktop-light-de.png
+..  figure:: /Images/Screenshots/person-create/desktop-light-de.webp
 ```
 
 - The ID after `docshot:` names the set and must be unique across RST and `.feature` files. This is checked.
@@ -426,7 +434,7 @@ npx docshots stats             # counts: rendered / unrendered / changed (see "S
 
 Every scenario ("recipe") gets a fingerprint made of:
 - its steps, including the `Grundlage`/Background, tags and language,
-- the config parts that change every image: variants, output paths, theme, padding, mask colour, video, clock,
+- the config parts that change every image: variants, output paths, image format and quality, theme, padding, mask colour, video, clock,
 - the package version,
 - the content of your step files (the `steps` globs).
 
@@ -437,12 +445,17 @@ of the last successful run. Commit it together with the images. A recipe is rend
 |---|---|
 | `+ neu` | not in the lock file yet |
 | `~ geändert` | steps, tags, Background, config or step files changed |
-| `! Dateien fehlen` | an image or video listed in the lock file is missing |
+| `! Dateien fehlen` | an image or video is missing – listed in the lock file, or expected for a variant (see below) |
 | `- entfernt` | the recipe is gone (images are not deleted automatically) |
 
 How it behaves:
 - The lock file is updated after **every** run (`test` and `update`), for recipes that passed in all variants that ran. Failed recipes stay outdated, so the next `update` tries them again.
 - Partial runs (`--grep`, `--project`) only record what actually ran.
+- Missing files are found even if the lock file doesn't list them: the lock file remembers which
+  screenshots and videos a recipe produces, and every one of them is expected in every variant the
+  recipe runs in (respecting `@viewports:`/`@schemes:`/`@lang:`), plus its `*.clean.<ext>` with
+  `keepClean: true`. So after a `--project` or `--no-clean` run, or after deleting a whole folder,
+  `docshots update` renders what is missing. With `--no-clean`, missing clean images don't count.
 - Changes to the **application itself** (new layout, renamed buttons) cannot be seen from the steps. Run a full `docshots test` for that, e.g. nightly or before a release. Changes in page objects or fixtures outside the `steps` globs also need a full run.
 
 ## Statistics
@@ -506,7 +519,7 @@ Extracts the RST blocks, generates the tests (bddgen), runs Playwright, then wri
 | Option | Description |
 |---|---|
 | `--changed` | render only new/changed recipes and recipes with missing files (same as `docshots update`) |
-| `--no-clean` | don't write `*.clean.png` in this run, even with `keepClean: true` |
+| `--no-clean` | don't write `*.clean.<ext>` in this run, even with `keepClean: true` |
 | *Playwright arguments* | passed through, e.g. `--grep person-create`, `--project desktop-light-de`, `--workers 2`, `--headed` |
 
 `--no-clean` makes a run faster without changing any fingerprint. Existing clean images stay as they

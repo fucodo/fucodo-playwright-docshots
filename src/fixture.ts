@@ -20,8 +20,10 @@ export interface DocshotVariant {
 export interface DocshotOptions {
   /** Absolute path template: {id} {viewport} {scheme} {lang} {project} */
   docshotOutput: string;
-  /** Also write <name>.clean.png without overlays */
+  /** Also write <name>.clean.<ext> without overlays */
   docshotKeepClean: boolean;
+  /** Image format and quality; the extension of docshotOutput follows the format */
+  docshotImage: ImageOptions;
   docshotVariant: DocshotVariant;
   docshotTheme: OverlayTheme;
   /** Freeze the browser clock at this ISO date/time (undefined = real time) */
@@ -87,30 +89,12 @@ const DEFAULT_THEME: OverlayTheme = {
   fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
 };
 
-import { slug } from './util';
+import { fillTemplate, readDocshotTags, slug } from './util';
 import { AMBIGUOUS_HINT } from './steps/targets';
-export { slug };
+export { fillTemplate, readDocshotTags, slug };
 import { DEFAULT_VIDEO, encodeVideo, withFormat, type Frame, type Region, type VideoOptions } from './video';
+import { DEFAULT_IMAGE, IMAGE_CONTENT_TYPE, pngToWebp, withImageFormat, type ImageOptions } from './image';
 import { ONLY_ENV, RESULTS_DIR } from './update';
-
-/** Reads @id:, @viewports:, @schemes:, @lang:/@languages: tags of the current test. */
-export function readDocshotTags(tags: string[]) {
-  const list = (prefixes: string[]) => {
-    for (const t of tags) {
-      for (const p of prefixes) {
-        if (t.toLowerCase().startsWith(`@${p}:`)) return t.slice(p.length + 2).split(',').map((s) => s.trim()).filter(Boolean);
-      }
-    }
-    return undefined;
-  };
-  return {
-    id: list(['id'])?.[0],
-    viewports: list(['viewports', 'viewport']),
-    schemes: list(['schemes', 'scheme']),
-    languages: list(['languages', 'lang', 'language']),
-    source: list(['source'])?.[0],
-  };
-}
 
 interface Recording {
   id: string;
@@ -154,7 +138,10 @@ export class Docshot {
 
   /** Where a capture with this ID would be written in the current variant. */
   plannedFile(id: string): string {
-    return fillTemplate(this.opts.docshotOutput, { id, ...this.opts.docshotVariant, project: this.testInfo.project.name });
+    return withImageFormat(
+      fillTemplate(this.opts.docshotOutput, { id, ...this.opts.docshotVariant, project: this.testInfo.project.name }),
+      this.opts.docshotImage.format,
+    );
   }
 
   /** Forget highlights and masks (used when a dry run is retried). */
@@ -608,13 +595,16 @@ export class Docshot {
     }
 
     const variant = opts.docshotVariant;
-    const file = fillTemplate(opts.docshotOutput, { id, ...variant, project: testInfo.project.name });
+    const file = this.plannedFile(id);
     const cleanFile = opts.docshotKeepClean ? file.replace(/(\.[a-z]+)$/i, '.clean$1') : undefined;
     fs.mkdirSync(path.dirname(file), { recursive: true });
 
-    const shot = (p: string) =>
-      page.screenshot({
-        path: p,
+    const { format, quality } = opts.docshotImage;
+    const shot = async (p: string) => {
+      const buf = await page.screenshot({
+        // Playwright only writes PNG and JPEG – WebP is encoded from the PNG afterwards
+        type: format === 'jpeg' ? 'jpeg' : 'png',
+        quality: format === 'jpeg' ? quality : undefined,
         clip,
         fullPage: Boolean(clip) || Boolean(options.fullPage),
         animations: 'disabled',
@@ -622,6 +612,8 @@ export class Docshot {
         mask: this.masks,
         maskColor: opts.docshotMaskColor,
       });
+      fs.writeFileSync(p, format === 'webp' ? await pngToWebp(page.context(), buf, quality) : buf);
+    };
 
     try {
       if (cleanFile) {
@@ -651,7 +643,7 @@ export class Docshot {
       path.join(opts.docshotManifestDir, `${slug(id)}__${slug(testInfo.project.name)}.json`),
       JSON.stringify(entry, null, 2),
     );
-    await testInfo.attach(`docshot ${id}`, { path: file, contentType: 'image/png' });
+    await testInfo.attach(`docshot ${id}`, { path: file, contentType: IMAGE_CONTENT_TYPE[format] });
 
     // highlights belong to one capture – except while a video runs, where they stay visible
     if (!this.recording) this.marks = [];
@@ -681,10 +673,6 @@ function clampRect(r: Rect, doc: { width: number; height: number }): Rect {
   return { x, y, width: Math.max(1, right - x), height: Math.max(1, bottom - y) };
 }
 
-export function fillTemplate(template: string, values: Record<string, string>): string {
-  return template.replace(/\{(\w+)\}/g, (m, key: string) => (key in values ? slug(values[key]) : m));
-}
-
 export type DocshotFixtures = {
   docshot: Docshot;
   _docshotVariantFilter: void;
@@ -698,6 +686,7 @@ export type DocshotFixtures = {
 export const docshotTest = base.extend<DocshotOptions & DocshotFixtures>({
   docshotOutput: [path.resolve('docshots/{id}/{project}.png'), { option: true }],
   docshotKeepClean: [false, { option: true }],
+  docshotImage: [DEFAULT_IMAGE, { option: true }],
   docshotVariant: [{ viewport: 'default', scheme: 'light', lang: 'en' }, { option: true }],
   docshotTheme: [DEFAULT_THEME, { option: true }],
   docshotClock: [undefined, { option: true }],
@@ -736,9 +725,9 @@ export const docshotTest = base.extend<DocshotOptions & DocshotFixtures>({
     { auto: true },
   ],
 
-  docshot: async ({ page, docshotOutput, docshotKeepClean, docshotVariant, docshotTheme, docshotClock, docshotPadding, docshotManifestDir, docshotMaskColor, docshotVideo }, use, testInfo) => {
+  docshot: async ({ page, docshotOutput, docshotKeepClean, docshotImage, docshotVariant, docshotTheme, docshotClock, docshotPadding, docshotManifestDir, docshotMaskColor, docshotVideo }, use, testInfo) => {
     const docshot = new Docshot(page, testInfo, {
-      docshotOutput, docshotKeepClean, docshotVariant, docshotTheme, docshotClock, docshotPadding, docshotManifestDir, docshotMaskColor, docshotVideo,
+      docshotOutput, docshotKeepClean, docshotImage, docshotVariant, docshotTheme, docshotClock, docshotPadding, docshotManifestDir, docshotMaskColor, docshotVideo,
     });
     await use(docshot);
     // result per test for the lock file (written even if the test failed)

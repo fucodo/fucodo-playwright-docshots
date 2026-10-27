@@ -300,7 +300,7 @@ export async function analyze(job: AnalyzeJob, deps: AnalyzeDeps): Promise<Analy
 
       if (!errors.length) {
         result.ok = true;
-        result.preview = path.join(outDir, `preview-${attempt}.png`);
+        result.preview = preview.plannedFile(job.id); // extension follows the image format
         break;
       }
       if (attempt < job.attempts) {

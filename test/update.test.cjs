@@ -115,3 +115,52 @@ test('statistics: rendered, unrendered, changed and files per kind', () => {
     { source: 'features/c.feature', total: 2, rendered: 0, toRender: 2 },
   ]);
 });
+
+test('lock: files missing although not listed – other variants, clean images, tag filters, old locks', () => {
+  const { root, work, input } = project();
+  const f = path.join(root, 'features', 'a.feature');
+  fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace('  @id:custom-id', '  @id:custom-id @viewports:desktop'));
+  const variant = (viewport) => ({ project: `${viewport}-light-de`, viewport, scheme: 'light', lang: 'de' });
+  const expected = {
+    image: path.join(root, 'img/{id}/{viewport}-{scheme}-{lang}.webp'),
+    video: path.join(root, 'vid/{id}/{viewport}-{scheme}-{lang}.mp4'),
+    keepClean: true,
+    variants: [variant('desktop'), variant('mobile')],
+  };
+  const recipes = collectRecipes(input);
+  // a run with --project desktop-light-de --no-clean: only the desktop images
+  fakeRun(work, root,
+    [{ titles: ['shot-one'], project: 'desktop-light-de', status: 'passed' }, { titles: ['custom-id'], project: 'desktop-light-de', status: 'passed' }],
+    [
+      { id: 'shot-one', recipe: 'shot-one', file: 'img/shot-one/desktop-light-de.webp' },
+      { id: 'shot-one-video', recipe: 'shot-one', kind: 'video', file: 'vid/shot-one-video/desktop-light-de.mp4' },
+      { id: 'custom-id', recipe: 'custom-id', file: 'img/custom-id/desktop-light-de.webp' },
+    ]);
+  updateLock(input, recipes, undefined);
+  const lock = readLock(input.lockFile);
+  assert.deepEqual(lock.recipes['shot-one'].captures, [{ id: 'shot-one', kind: 'screenshot' }, { id: 'shot-one-video', kind: 'video' }]);
+
+  // without the expected outputs only the listed files count (old behaviour)
+  assert.ok(compare(recipes, lock, root).statuses.every((s) => s.reason === 'unverändert'));
+
+  const byId = (l) => Object.fromEntries(compare(recipes, l, root, expected).statuses.map((s) => [s.recipe.id, s]));
+  const st = byId(lock);
+  assert.equal(st['shot-one'].reason, 'Dateien fehlen');
+  assert.deepEqual(st['shot-one'].missing, [
+    'img/shot-one/desktop-light-de.clean.webp',
+    'img/shot-one/mobile-light-de.clean.webp',
+    'img/shot-one/mobile-light-de.webp',
+    'vid/shot-one-video/mobile-light-de.mp4',
+  ]);
+  // @viewports:desktop → no mobile image expected
+  assert.deepEqual(st['custom-id'].missing, ['img/custom-id/desktop-light-de.clean.webp']);
+
+  // --no-clean: clean images are not expected
+  const noClean = Object.fromEntries(compare(recipes, lock, root, { ...expected, keepClean: false }).statuses.map((s) => [s.recipe.id, s]));
+  assert.equal(noClean['custom-id'].reason, 'unverändert');
+  assert.deepEqual(noClean['shot-one'].missing, ['img/shot-one/mobile-light-de.webp', 'vid/shot-one-video/mobile-light-de.mp4']);
+
+  // lock files written before captures were recorded: captures come from the file names
+  for (const e of Object.values(lock.recipes)) delete e.captures;
+  assert.deepEqual(byId(lock)['shot-one'].missing, st['shot-one'].missing);
+});

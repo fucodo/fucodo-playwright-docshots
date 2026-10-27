@@ -211,7 +211,8 @@ ${base}  language: '${lang}',
     languages: { ${lang}: {} },             // more languages: { de: {}, en: {} }
   },
 
-  output: 'Documentation/Images/Screenshots/{id}/{viewport}-{scheme}-{lang}.png',
+  output: 'Documentation/Images/Screenshots/{id}/{viewport}-{scheme}-{lang}.webp',
+  // imageFormat: 'png',                    // 'webp' (default), 'png' or 'jpeg'
   keepClean: true,
   // clock: '2026-09-15T09:30:00+02:00',   // freeze time for stable dates
   // theme: { color: '#d50c2f' },

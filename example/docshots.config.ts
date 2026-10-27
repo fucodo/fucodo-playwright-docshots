@@ -21,6 +21,7 @@ export default defineDocshotConfig({
   },
 
   output: 'Documentation/Images/Screenshots/{id}/{viewport}-{scheme}-{lang}.png',
+  imageFormat: 'png', // the committed example images and RST references are PNG
   keepClean: true,
   clock: '2026-09-15T09:30:00+02:00',
   theme: { color: '#d50c2f' },

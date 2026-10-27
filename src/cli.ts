@@ -231,7 +231,7 @@ async function main() {
     case 'test': {
       // update mode: only new/changed recipes and recipes with missing files
       const changedOnly = command === 'update' || rest.includes('--changed');
-      // --no-clean: no *.clean.png in this run, even with keepClean: true
+      // --no-clean: no *.clean.<ext> in this run, even with keepClean: true
       if (rest.includes('--no-clean')) process.env[NO_CLEAN_ENV] = '1';
       const pwArgs = rest.filter((a) => a !== '--changed' && a !== '--no-clean');
       const gen = await run(binOf('playwright-bdd', 'bddgen'), ['-c', config], workDir);
@@ -244,7 +244,7 @@ async function main() {
 
       let run_ids: Set<string> | undefined;
       if (changedOnly) {
-        const { statuses, removed } = compare(recipes, readLock(input.lockFile), input.rootDir);
+        const { statuses, removed } = compare(recipes, readLock(input.lockFile), input.rootDir, input.expected);
         const todo = statuses.filter((st) => st.reason !== 'unverändert');
         printStatus(statuses, removed, input.rootDir);
         if (!todo.length) {
@@ -274,7 +274,7 @@ async function main() {
       const gen = await run(binOf('playwright-bdd', 'bddgen'), ['-c', config], workDir);
       if (gen.code !== 0) process.exit(gen.code);
       const input = readStateInput(path.resolve(workDir));
-      const { statuses, removed } = compare(collectRecipes(input), readLock(input.lockFile), input.rootDir);
+      const { statuses, removed } = compare(collectRecipes(input), readLock(input.lockFile), input.rootDir, input.expected);
       printStatus(statuses, removed, input.rootDir, true);
       const todo = statuses.filter((st) => st.reason !== 'unverändert').length;
       console.log(todo ? `\n${todo} Rezept(e) zu rendern: npx docshots update` : '\n✔ Alles aktuell.');
@@ -288,7 +288,7 @@ async function main() {
       if (gen.code !== 0) process.exit(gen.code);
       const input = readStateInput(path.resolve(workDir));
       const lock = readLock(input.lockFile);
-      const { statuses, removed } = compare(collectRecipes(input), lock, input.rootDir);
+      const { statuses, removed } = compare(collectRecipes(input), lock, input.rootDir, input.expected);
       const stats = statistics(statuses, removed, lock);
       if (rest.includes('--json')) process.stdout.write(JSON.stringify(stats, null, 2) + '\n');
       else printStatistics(stats);
